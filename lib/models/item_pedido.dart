@@ -3,10 +3,11 @@ import 'producto.dart';
 class ItemPedido {
   Producto producto;
   int cantidad;
+  int? detalleId;
   double costoUnitario; // Nuevo
   double gananciaUnitaria; // Nuevo
 
-  ItemPedido({required this.producto, required this.cantidad})
+  ItemPedido({required this.producto, required this.cantidad, this.detalleId})
     : costoUnitario = producto.precioproveedor,
       gananciaUnitaria = producto.ganancia;
 

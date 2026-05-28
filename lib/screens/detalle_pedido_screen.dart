@@ -7,8 +7,9 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import '../models/clientes.dart';
 import '../models/item_pedido.dart';
+import '../database/database_helper.dart';
 
-class DetallePedidoScreen extends StatelessWidget {
+class DetallePedidoScreen extends StatefulWidget {
   final int pedidoId;
   final Clientes cliente;
   final List<ItemPedido> items;
@@ -26,6 +27,22 @@ class DetallePedidoScreen extends StatelessWidget {
     required this.status,
   });
 
+  @override
+  State<DetallePedidoScreen> createState() => _DetallePedidoScreenState();
+}
+
+class _DetallePedidoScreenState extends State<DetallePedidoScreen> {
+  late List<ItemPedido> _items;
+  late double _total;
+  bool _isEditing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _items = List.from(widget.items);
+    _total = widget.total;
+  }
+
   Future<pw.Document> _generarPDF() async {
     final pdf = pw.Document();
 
@@ -36,7 +53,6 @@ class DetallePedidoScreen extends StatelessWidget {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              // Encabezado
               pw.Center(
                 child: pw.Column(
                   children: [
@@ -49,15 +65,15 @@ class DetallePedidoScreen extends StatelessWidget {
                     ),
                     pw.SizedBox(height: 10),
                     pw.Text(
-                      'Pedido #$pedidoId',
+                      'Pedido #${widget.pedidoId}',
                       style: const pw.TextStyle(fontSize: 16),
                     ),
                     pw.SizedBox(height: 5),
                     pw.Text(
-                      'Status: $status',
+                      'Status: ${widget.status}',
                       style: pw.TextStyle(
                         fontSize: 14,
-                        color: status == 'CERRADO'
+                        color: widget.status == 'CERRADO'
                             ? PdfColors.green
                             : PdfColors.orange,
                       ),
@@ -68,7 +84,6 @@ class DetallePedidoScreen extends StatelessWidget {
               pw.Divider(),
               pw.SizedBox(height: 20),
 
-              // Datos del cliente
               pw.Text(
                 'DATOS DEL CLIENTE',
                 style: pw.TextStyle(
@@ -78,17 +93,15 @@ class DetallePedidoScreen extends StatelessWidget {
               ),
               pw.SizedBox(height: 10),
               pw.Text(
-                'Nombre: ${cliente.nombrecliente} ${cliente.apellido1} ${cliente.apellido2}',
+                'Nombre: ${widget.cliente.nombrecliente} ${widget.cliente.apellido1} ${widget.cliente.apellido2}',
               ),
-              pw.Text('Teléfono: ${cliente.telefono}'),
-              pw.Text('Dirección: ${cliente.direccion}'),
+              pw.Text('Teléfono: ${widget.cliente.telefono}'),
+              pw.Text('Dirección: ${widget.cliente.direccion}'),
               pw.SizedBox(height: 20),
 
-              // Fecha
-              pw.Text('Fecha: ${fecha.toString().substring(0, 16)}'),
+              pw.Text('Fecha: ${widget.fecha.toString().substring(0, 16)}'),
               pw.SizedBox(height: 20),
 
-              // Tabla de productos
               pw.Text(
                 'PRODUCTOS',
                 style: pw.TextStyle(
@@ -127,7 +140,7 @@ class DetallePedidoScreen extends StatelessWidget {
                       ),
                     ],
                   ),
-                  ...items.asMap().entries.map((entry) {
+                  ..._items.asMap().entries.map((entry) {
                     final index = entry.key;
                     final item = entry.value;
                     return pw.TableRow(
@@ -150,7 +163,6 @@ class DetallePedidoScreen extends StatelessWidget {
               ),
               pw.SizedBox(height: 20),
 
-              // Resumen de ganancias
               pw.Container(
                 padding: const pw.EdgeInsets.all(10),
                 decoration: pw.BoxDecoration(
@@ -167,7 +179,7 @@ class DetallePedidoScreen extends StatelessWidget {
                           style: const pw.TextStyle(fontSize: 14),
                         ),
                         pw.Text(
-                          '\$${total.toStringAsFixed(2)}',
+                          '\$${_total.toStringAsFixed(2)}',
                           style: const pw.TextStyle(fontSize: 14),
                         ),
                       ],
@@ -180,7 +192,7 @@ class DetallePedidoScreen extends StatelessWidget {
                           style: const pw.TextStyle(fontSize: 14),
                         ),
                         pw.Text(
-                          '\$${items.fold(0.0, (sum, item) => sum + item.costoTotal).toStringAsFixed(2)}',
+                          '\$${_items.fold(0.0, (sum, item) => sum + (item.producto.precioproveedor * item.cantidad)).toStringAsFixed(2)}',
                           style: const pw.TextStyle(fontSize: 14),
                         ),
                       ],
@@ -197,7 +209,7 @@ class DetallePedidoScreen extends StatelessWidget {
                           ),
                         ),
                         pw.Text(
-                          '\$${items.fold(0.0, (sum, item) => sum + ((item.producto.precioventa - item.producto.precioproveedor) * item.cantidad)).toStringAsFixed(2)}',
+                          '\$${_items.fold(0.0, (sum, item) => sum + ((item.producto.precioventa - item.producto.precioproveedor) * item.cantidad)).toStringAsFixed(2)}',
                           style: pw.TextStyle(
                             fontSize: 18,
                             fontWeight: pw.FontWeight.bold,
@@ -211,7 +223,6 @@ class DetallePedidoScreen extends StatelessWidget {
               ),
               pw.SizedBox(height: 20),
 
-              // Total final
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
@@ -223,7 +234,7 @@ class DetallePedidoScreen extends StatelessWidget {
                     ),
                   ),
                   pw.Text(
-                    '\$${total.toStringAsFixed(2)}',
+                    '\$${_total.toStringAsFixed(2)}',
                     style: pw.TextStyle(
                       fontSize: 20,
                       fontWeight: pw.FontWeight.bold,
@@ -234,7 +245,6 @@ class DetallePedidoScreen extends StatelessWidget {
               ),
               pw.SizedBox(height: 40),
 
-              // Pie de página
               pw.Divider(),
               pw.SizedBox(height: 10),
               pw.Center(
@@ -282,45 +292,179 @@ class DetallePedidoScreen extends StatelessWidget {
       final pdfBytes = await pdf.save();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final tempDir = await getTemporaryDirectory();
-      final file = File('${tempDir.path}/pedido_$pedidoId.pdf');
-
+      final file = File('${tempDir.path}/pedido_${widget.pedidoId}.pdf');
       await file.writeAsBytes(pdfBytes);
 
       await Share.shareXFiles(
         [XFile(file.path)],
         text:
-            'Pedido #$pedidoId - ${cliente.nombrecliente}\nTotal: \$${total.toStringAsFixed(2)}\nStatus: $status',
+            'Pedido #${widget.pedidoId} - ${widget.cliente.nombrecliente}\nTotal: \$${_total.toStringAsFixed(2)}\nStatus: ${widget.status}',
       );
     } catch (e) {
       debugPrint('Error al compartir: $e');
     }
   }
 
+  Future<void> _eliminarProducto(int index, ItemPedido item) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar producto'),
+        content: Text(
+          '¿Eliminar ${item.producto.nombreproducto} del pedido?\n\n'
+          'Se restaurará el stock de ${item.cantidad} unidades.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar != true) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      await DatabaseHelper.instance.eliminarProductoDelPedido(
+        item.detalleId!,
+        item.producto.id!,
+        item.cantidad,
+        widget.pedidoId,
+      );
+
+      setState(() {
+        _items.removeAt(index);
+        _total = _items.fold(0.0, (sum, i) => sum + i.subtotal);
+      });
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Producto eliminado del pedido')),
+        );
+      }
+
+      if (_items.isEmpty && mounted) {
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _cancelarPedido() async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancelar Pedido'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              '¿Estás seguro de cancelar este pedido?',
+              style: TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Se restaurará el stock de todos los productos.',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('No, mantener'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Sí, cancelar pedido'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar != true) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      await DatabaseHelper.instance.cancelarPedido(widget.pedidoId);
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Pedido cancelado')));
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final double gananciaTotal = items.fold(
+    final double gananciaTotal = _items.fold(
       0.0,
       (sum, item) =>
           sum +
           ((item.producto.precioventa - item.producto.precioproveedor) *
               item.cantidad),
     );
-    final double costoTotal = items.fold(
+    final double costoTotal = _items.fold(
       0.0,
       (sum, item) => sum + (item.producto.precioproveedor * item.cantidad),
     );
+
     return Scaffold(
       appBar: AppBar(
         title: Column(
           children: [
-            Text('Pedido #$pedidoId'),
-            Text(status, style: const TextStyle(fontSize: 12)),
+            Text('Pedido #${widget.pedidoId}'),
+            Text(widget.status, style: const TextStyle(fontSize: 12)),
           ],
         ),
         centerTitle: true,
-        backgroundColor: status == 'CERRADO' ? Colors.green : Colors.orange,
+        backgroundColor: widget.status == 'CERRADO'
+            ? Colors.green
+            : Colors.orange,
         foregroundColor: Colors.white,
         actions: [
+          if (widget.status == 'PENDIENTE') ...[
+            IconButton(
+              icon: Icon(_isEditing ? Icons.check : Icons.edit),
+              onPressed: () => setState(() => _isEditing = !_isEditing),
+              tooltip: _isEditing ? 'Terminar edición' : 'Editar pedido',
+            ),
+          ],
           IconButton(
             icon: const Icon(Icons.share),
             onPressed: () async {
@@ -339,306 +483,347 @@ class DetallePedidoScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Datos del cliente
-            Card(
-              elevation: 3,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+      body: _items.isEmpty
+          ? const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.shopping_cart, size: 64, color: Colors.grey),
+                  SizedBox(height: 16),
+                  Text('Pedido cancelado o sin productos'),
+                ],
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.person, color: Colors.orange),
-                        SizedBox(width: 8),
-                        Text(
-                          'DATOS DEL CLIENTE',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
+            )
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Card(
+                    elevation: 3,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    const Divider(),
-                    ListTile(
-                      leading: const Icon(Icons.person_outline),
-                      title: const Text('Nombre completo'),
-                      subtitle: Text(
-                        '${cliente.nombrecliente} ${cliente.apellido1} ${cliente.apellido2}',
-                      ),
-                      dense: true,
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.phone),
-                      title: const Text('Teléfono'),
-                      subtitle: Text(cliente.telefono),
-                      dense: true,
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.location_on),
-                      title: const Text('Dirección'),
-                      subtitle: Text(cliente.direccion),
-                      dense: true,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Fecha
-            Card(
-              elevation: 2,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.calendar_today, color: Colors.orange),
-                        SizedBox(width: 8),
-                        Text('Fecha del pedido:'),
-                      ],
-                    ),
-                    Text(
-                      '${fecha.day}/${fecha.month}/${fecha.year} ${fecha.hour}:${fecha.minute.toString().padLeft(2, '0')}',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Lista de productos
-            Card(
-              elevation: 3,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.shopping_cart, color: Colors.orange),
-                        SizedBox(width: 8),
-                        Text(
-                          'PRODUCTOS',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Divider(),
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: items.length,
-                      itemBuilder: (context, index) {
-                        final item = items[index];
-                        final gananciaReal =
-                            (item.producto.precioventa -
-                                item.producto.precioproveedor) *
-                            item.cantidad;
-
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: Colors.orange.shade100,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    '${item.cantidad}',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.orange.shade900,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      item.producto.nombreproducto,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Row(
-                                      children: [
-                                        Text(
-                                          '${item.cantidad} x \$${item.producto.precioventa.toStringAsFixed(2)}',
-                                          style: const TextStyle(
-                                            color: Colors.grey,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 6,
-                                            vertical: 2,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: Colors.green.shade50,
-                                            borderRadius: BorderRadius.circular(
-                                              4,
-                                            ),
-                                          ),
-
-                                          child: Text(
-                                            'Ganancia: \$${gananciaReal.toStringAsFixed(2)}',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              color: Colors.green.shade700,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Text(
-                                '\$${item.subtotal.toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                    const Divider(),
-
-                    // Resumen de costos y ganancias
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          const Row(
                             children: [
-                              const Text(
-                                'Subtotal:',
-                                style: TextStyle(fontSize: 14),
-                              ),
+                              Icon(Icons.person, color: Colors.orange),
+                              SizedBox(width: 8),
                               Text(
-                                '\$${total.toStringAsFixed(2)}',
-                                style: const TextStyle(fontSize: 14),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                'Costo de productos:',
-                                style: TextStyle(fontSize: 14),
-                              ),
-                              Text(
-                                '\$${costoTotal.toStringAsFixed(2)}',
-                                style: const TextStyle(fontSize: 14),
-                              ),
-                            ],
-                          ),
-                          const Divider(),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                'GANANCIA TOTAL:',
+                                'DATOS DEL CLIENTE',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
+                            ],
+                          ),
+                          const Divider(),
+                          ListTile(
+                            leading: const Icon(Icons.person_outline),
+                            title: const Text('Nombre completo'),
+                            subtitle: Text(
+                              '${widget.cliente.nombrecliente} ${widget.cliente.apellido1} ${widget.cliente.apellido2}',
+                            ),
+                            dense: true,
+                          ),
+                          ListTile(
+                            leading: const Icon(Icons.phone),
+                            title: const Text('Teléfono'),
+                            subtitle: Text(widget.cliente.telefono),
+                            dense: true,
+                          ),
+                          ListTile(
+                            leading: const Icon(Icons.location_on),
+                            title: const Text('Dirección'),
+                            subtitle: Text(widget.cliente.direccion),
+                            dense: true,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  Card(
+                    elevation: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.calendar_today, color: Colors.orange),
+                              SizedBox(width: 8),
+                              Text('Fecha del pedido:'),
+                            ],
+                          ),
+                          Text(
+                            '${widget.fecha.day}/${widget.fecha.month}/${widget.fecha.year} ${widget.fecha.hour}:${widget.fecha.minute.toString().padLeft(2, '0')}',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  Card(
+                    elevation: 3,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.shopping_cart, color: Colors.orange),
+                              SizedBox(width: 8),
                               Text(
-                                '\$${gananciaTotal.toStringAsFixed(2)}',
+                                'PRODUCTOS',
                                 style: TextStyle(
-                                  fontSize: 18,
+                                  fontSize: 16,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.green.shade700,
                                 ),
                               ),
                             ],
                           ),
+                          const Divider(),
+                          ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: _items.length,
+                            itemBuilder: (context, index) {
+                              final item = _items[index];
+                              final gananciaReal =
+                                  (item.producto.precioventa -
+                                      item.producto.precioproveedor) *
+                                  item.cantidad;
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      width: 40,
+                                      height: 40,
+                                      decoration: BoxDecoration(
+                                        color: Colors.orange.shade100,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          '${item.cantidad}',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.orange.shade900,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            item.producto.nombreproducto,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Row(
+                                            children: [
+                                              Text(
+                                                '${item.cantidad} x \$${item.producto.precioventa.toStringAsFixed(2)}',
+                                                style: const TextStyle(
+                                                  color: Colors.grey,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2,
+                                                    ),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.green.shade50,
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                ),
+                                                child: Text(
+                                                  'Ganancia: \$${gananciaReal.toStringAsFixed(2)}',
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    color:
+                                                        Colors.green.shade700,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Text(
+                                      '\$${item.subtotal.toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    if (_isEditing)
+                                      Padding(
+                                        padding: const EdgeInsets.only(left: 8),
+                                        child: IconButton(
+                                          icon: const Icon(
+                                            Icons.delete,
+                                            color: Colors.red,
+                                            size: 20,
+                                          ),
+                                          onPressed: () =>
+                                              _eliminarProducto(index, item),
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                          const Divider(),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Column(
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text(
+                                      'Subtotal:',
+                                      style: TextStyle(fontSize: 14),
+                                    ),
+                                    Text(
+                                      '\$${_total.toStringAsFixed(2)}',
+                                      style: const TextStyle(fontSize: 14),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text(
+                                      'Costo de productos:',
+                                      style: TextStyle(fontSize: 14),
+                                    ),
+                                    Text(
+                                      '\$${costoTotal.toStringAsFixed(2)}',
+                                      style: const TextStyle(fontSize: 14),
+                                    ),
+                                  ],
+                                ),
+                                const Divider(),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text(
+                                      'GANANCIA TOTAL:',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    Text(
+                                      '\$${gananciaTotal.toStringAsFixed(2)}',
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.green.shade700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.orange.shade200),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'TOTAL DEL PEDIDO:',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                Text(
+                                  '\$${_total.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.orange,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          if (widget.status == 'PENDIENTE' && !_isEditing)
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: _cancelarPedido,
+                                icon: const Icon(Icons.cancel),
+                                label: const Text('CANCELAR PEDIDO COMPLETO'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 16),
-
-                    // Total final
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.orange.shade200),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'TOTAL DEL PEDIDO:',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Text(
-                            '\$${total.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.orange,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-      ),
     );
   }
 }
