@@ -929,22 +929,23 @@ class DatabaseHelper {
     final db = await database;
     return await db.rawQuery(
       '''
-      SELECT 
-        d.idPedido,
-        d.idProducto,
-        d.cantidad,
-        d.precioUnitario,
-        d.costoUnitario,
-        d.subtotal,
-        d.ganancia,
-        pr.codigo,
-        pr.nombreproducto,
-        pr.descripcion,
-        pr.unidadmedida
-      FROM detalle_pedido d
-      JOIN productos pr ON d.idProducto = pr.id
-      WHERE d.idPedido = ?
-    ''',
+    SELECT 
+      d.id,
+      d.idPedido,
+      d.idProducto,
+      d.cantidad,
+      d.precioUnitario,
+      d.costoUnitario,
+      d.subtotal,
+      d.ganancia,
+      pr.codigo,
+      pr.nombreproducto,
+      pr.descripcion,
+      pr.unidadmedida
+    FROM detalle_pedido d
+    JOIN productos pr ON d.idProducto = pr.id
+    WHERE d.idPedido = ?
+  ''',
       [pedidoId],
     );
   }
@@ -1035,5 +1036,67 @@ class DatabaseHelper {
       where: 'fecha >= ? AND fecha < ? AND status = "PENDIENTE"',
       whereArgs: [inicioDia.toIso8601String(), finDia.toIso8601String()],
     );
+  }
+
+  // Eliminar un producto específico del pedido y restaurar stock
+  Future<void> eliminarProductoDelPedido(
+    int detalleId,
+    int productoId,
+    int cantidad,
+    int pedidoId,
+  ) async {
+    final db = await database;
+
+    await db.delete('detalle_pedido', where: 'id = ?', whereArgs: [detalleId]);
+
+    await db.execute(
+      'UPDATE productos SET cantidad = cantidad + $cantidad WHERE id = $productoId',
+    );
+
+    final detallesRestantes = await db.query(
+      'detalle_pedido',
+      where: 'idPedido = ?',
+      whereArgs: [pedidoId],
+    );
+
+    if (detallesRestantes.isEmpty) {
+      await db.delete('pedidos', where: 'id = ?', whereArgs: [pedidoId]);
+    } else {
+      final nuevoTotal = await db.rawQuery(
+        'SELECT SUM(subtotal) as total FROM detalle_pedido WHERE idPedido = ?',
+        [pedidoId],
+      );
+      final total = nuevoTotal.first['total'] as double? ?? 0.0;
+      await db.update(
+        'pedidos',
+        {'total': total},
+        where: 'id = ?',
+        whereArgs: [pedidoId],
+      );
+    }
+  }
+
+  // Cancelar pedido completo y restaurar stock
+  Future<void> cancelarPedido(int pedidoId) async {
+    final db = await database;
+
+    final detalles = await db.query(
+      'detalle_pedido',
+      where: 'idPedido = ?',
+      whereArgs: [pedidoId],
+    );
+
+    for (var detalle in detalles) {
+      await db.execute(
+        'UPDATE productos SET cantidad = cantidad + ${detalle['cantidad']} WHERE id = ${detalle['idProducto']}',
+      );
+    }
+
+    await db.delete(
+      'detalle_pedido',
+      where: 'idPedido = ?',
+      whereArgs: [pedidoId],
+    );
+    await db.delete('pedidos', where: 'id = ?', whereArgs: [pedidoId]);
   }
 }
