@@ -3,6 +3,7 @@ import 'screens/home_screen.dart';
 import 'database/database_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'screens/demo_license_screen.dart';
 // void main() async {
 //   WidgetsFlutterBinding.ensureInitialized();
 
@@ -55,7 +56,8 @@ class MyApp extends StatelessWidget {
         Locale('es', 'MX'), // Español
         Locale('en', 'US'), // Inglés
       ],
-      home: const HomeScreen(),
+      // home: const HomeScreen(),
+      home: const DemoLicenseScreen(),
     );
   }
 }
