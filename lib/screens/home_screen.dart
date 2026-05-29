@@ -4,6 +4,7 @@ import 'productos_screen.dart';
 import 'clientes_screen.dart';
 import 'historial_pedidos_screen.dart';
 import 'corte_ventas_screen.dart'; // Nueva importación
+import 'backup_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,6 +22,7 @@ class _HomeScreenState extends State<HomeScreen> {
     const ClientesScreen(),
     const HistorialPedidosScreen(),
     const CorteVentasScreen(), // Nueva pestaña
+    const BackupScreen(), // Nueva pestaña
   ];
 
   @override
@@ -46,6 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
           NavigationDestination(icon: Icon(Icons.people), label: 'Clientes'),
           NavigationDestination(icon: Icon(Icons.history), label: 'Historial'),
           NavigationDestination(icon: Icon(Icons.assessment), label: 'Corte'),
+          NavigationDestination(icon: Icon(Icons.backup), label: 'Backup'),
         ],
       ),
     );
