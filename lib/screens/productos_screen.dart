@@ -61,6 +61,7 @@ class _ProductosScreenState extends State<ProductosScreen> {
   }
 
   Future<void> _buscarProductoPorCodigo(String codigo) async {
+    // Buscar si el producto ya existe
     final productoExistente = _productos.firstWhere(
       (p) => p.codigo.toLowerCase() == codigo.toLowerCase(),
       orElse: () => Producto(
@@ -75,6 +76,7 @@ class _ProductosScreenState extends State<ProductosScreen> {
     );
 
     if (productoExistente.nombreproducto.isNotEmpty) {
+      // Producto existe, preguntar si quiere editar
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
@@ -98,37 +100,20 @@ class _ProductosScreenState extends State<ProductosScreen> {
         ),
       );
     } else {
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Nuevo producto'),
-          content: Text(
-            'Código escaneado: $codigo\n¿Deseas crear un nuevo producto con este código?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _crearProductoConCodigo(codigo);
-              },
-              child: const Text('Crear producto'),
-            ),
-          ],
-        ),
-      );
+      // Producto nuevo, crear con validaciones
+      _crearProductoConCodigo(codigo);
     }
   }
 
   Future<void> _crearProductoConCodigo(String codigo) async {
     final nombreController = TextEditingController();
     final descripcionController = TextEditingController();
-    final cantidadController = TextEditingController(text: '0');
-    final precioProveedorController = TextEditingController(text: '0');
-    final precioVentaController = TextEditingController(text: '0');
+    final cantidadController = TextEditingController(
+      text: '1',
+    ); // Stock por defecto 1
+    final precioProveedorController =
+        TextEditingController(); // Vacío para obligar
+    final precioVentaController = TextEditingController(); // Vacío para obligar
 
     final unidades = ['pza', 'kg', 'lts', 'doc', 'caja', 'paquete'];
     String unidadSeleccionada = 'pza';
@@ -136,6 +121,7 @@ class _ProductosScreenState extends State<ProductosScreen> {
 
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => StatefulBuilder(
         builder: (context, setStateDialog) {
           return AlertDialog(
@@ -144,23 +130,30 @@ class _ProductosScreenState extends State<ProductosScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Código (solo lectura)
                   TextField(
                     controller: TextEditingController(text: codigo),
                     decoration: const InputDecoration(
-                      labelText: 'Código *',
+                      labelText: 'Código',
                       border: OutlineInputBorder(),
                     ),
                     readOnly: true,
+                    enabled: false,
                   ),
                   const SizedBox(height: 12),
+
+                  // Nombre (requerido)
                   TextField(
                     controller: nombreController,
                     decoration: const InputDecoration(
                       labelText: 'Nombre del producto *',
                       border: OutlineInputBorder(),
                     ),
+                    autofocus: true,
                   ),
                   const SizedBox(height: 12),
+
+                  // Descripción (opcional)
                   TextField(
                     controller: descripcionController,
                     decoration: const InputDecoration(
@@ -170,14 +163,17 @@ class _ProductosScreenState extends State<ProductosScreen> {
                     maxLines: 2,
                   ),
                   const SizedBox(height: 12),
+
+                  // Stock y unidad
                   Row(
                     children: [
                       Expanded(
                         child: TextField(
                           controller: cantidadController,
                           decoration: const InputDecoration(
-                            labelText: 'Stock inicial *',
+                            labelText: 'Stock *',
                             border: OutlineInputBorder(),
+                            hintText: 'Mínimo 1',
                           ),
                           keyboardType: TextInputType.number,
                         ),
@@ -187,7 +183,7 @@ class _ProductosScreenState extends State<ProductosScreen> {
                         child: DropdownButtonFormField<String>(
                           value: unidadSeleccionada,
                           decoration: const InputDecoration(
-                            labelText: 'Unidad',
+                            labelText: 'Unidad *',
                             border: OutlineInputBorder(),
                           ),
                           items: unidades.map((unidad) {
@@ -208,6 +204,8 @@ class _ProductosScreenState extends State<ProductosScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
+
+                  // Precio Proveedor y Precio Venta
                   Row(
                     children: [
                       Expanded(
@@ -217,6 +215,7 @@ class _ProductosScreenState extends State<ProductosScreen> {
                             labelText: 'Precio Proveedor *',
                             border: OutlineInputBorder(),
                             prefixText: '\$ ',
+                            hintText: 'Lo que te cuesta',
                           ),
                           keyboardType: TextInputType.number,
                           onChanged: (value) {
@@ -238,6 +237,7 @@ class _ProductosScreenState extends State<ProductosScreen> {
                             labelText: 'Precio Venta *',
                             border: OutlineInputBorder(),
                             prefixText: '\$ ',
+                            hintText: 'Precio al público',
                           ),
                           keyboardType: TextInputType.number,
                           onChanged: (value) {
@@ -256,6 +256,8 @@ class _ProductosScreenState extends State<ProductosScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
+
+                  // Mostrar ganancia calculada
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
@@ -277,7 +279,9 @@ class _ProductosScreenState extends State<ProductosScreen> {
                           style: TextStyle(fontWeight: FontWeight.bold),
                         ),
                         Text(
-                          '\$${gananciaCalculada.toStringAsFixed(2)}',
+                          gananciaCalculada >= 0
+                              ? '\$${gananciaCalculada.toStringAsFixed(2)}'
+                              : 'Pérdida: \$${(-gananciaCalculada).toStringAsFixed(2)}',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             color: gananciaCalculada >= 0
@@ -289,6 +293,11 @@ class _ProductosScreenState extends State<ProductosScreen> {
                       ],
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '* Campos obligatorios',
+                    style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                  ),
                 ],
               ),
             ),
@@ -299,33 +308,65 @@ class _ProductosScreenState extends State<ProductosScreen> {
               ),
               ElevatedButton(
                 onPressed: () async {
-                  if (nombreController.text.isNotEmpty) {
-                    final nuevoProducto = Producto(
-                      codigo: codigo,
-                      nombreproducto: nombreController.text,
-                      descripcion: descripcionController.text.isNotEmpty
-                          ? descripcionController.text
-                          : null,
-                      cantidad: double.parse(cantidadController.text),
-                      unidadmedida: unidadSeleccionada,
-                      precioproveedor: double.parse(
-                        precioProveedorController.text,
-                      ),
-                      precioventa: double.parse(precioVentaController.text),
-                      ganancia: gananciaCalculada,
+                  // Validaciones
+                  if (nombreController.text.trim().isEmpty) {
+                    _mostrarMensaje(
+                      'El nombre del producto es requerido',
+                      isError: true,
                     );
+                    return;
+                  }
 
-                    await DatabaseHelper.instance.insertProducto(nuevoProducto);
+                  final int stock = int.tryParse(cantidadController.text) ?? 0;
+                  if (stock <= 0) {
+                    _mostrarMensaje(
+                      'El stock debe ser mayor a 0',
+                      isError: true,
+                    );
+                    return;
+                  }
+
+                  final double precioProveedor =
+                      double.tryParse(precioProveedorController.text) ?? 0;
+                  if (precioProveedor <= 0) {
+                    _mostrarMensaje(
+                      'El precio proveedor debe ser mayor a 0',
+                      isError: true,
+                    );
+                    return;
+                  }
+
+                  final double precioVenta =
+                      double.tryParse(precioVentaController.text) ?? 0;
+                  if (precioVenta <= 0) {
+                    _mostrarMensaje(
+                      'El precio venta debe ser mayor a 0',
+                      isError: true,
+                    );
+                    return;
+                  }
+
+                  final double ganancia = precioVenta - precioProveedor;
+
+                  final nuevoProducto = Producto(
+                    codigo: codigo,
+                    nombreproducto: nombreController.text.trim(),
+                    descripcion: descripcionController.text.trim().isNotEmpty
+                        ? descripcionController.text.trim()
+                        : null,
+                    cantidad: stock.toDouble(),
+                    unidadmedida: unidadSeleccionada,
+                    precioproveedor: precioProveedor,
+                    precioventa: precioVenta,
+                    ganancia: ganancia,
+                  );
+
+                  await DatabaseHelper.instance.insertProducto(nuevoProducto);
+                  _cargarProductos();
+
+                  if (mounted) {
                     Navigator.pop(context);
-                    _cargarProductos();
-
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Producto creado correctamente'),
-                        ),
-                      );
-                    }
+                    _mostrarMensaje('Producto creado exitosamente');
                   }
                 },
                 child: const Text('Crear'),
@@ -349,13 +390,19 @@ class _ProductosScreenState extends State<ProductosScreen> {
       text: producto?.descripcion ?? '',
     );
     final cantidadController = TextEditingController(
-      text: producto?.cantidad.toString() ?? '0',
+      text: producto?.cantidad != null && producto!.cantidad > 0
+          ? producto.cantidad.toString()
+          : '1', // 👈 Stock por defecto: 1 (no 0)
     );
     final precioProveedorController = TextEditingController(
-      text: producto?.precioproveedor.toString() ?? '0',
+      text: producto?.precioproveedor != null && producto!.precioproveedor > 0
+          ? producto.precioproveedor.toString()
+          : '', // 👈 Vacío para obligar a llenar
     );
     final precioVentaController = TextEditingController(
-      text: producto?.precioventa.toString() ?? '0',
+      text: producto?.precioventa != null && producto!.precioventa > 0
+          ? producto.precioventa.toString()
+          : '', // 👈 Vacío para obligar a llenar
     );
 
     final unidades = ['pza', 'kg', 'lts', 'doc', 'caja', 'paquete'];
@@ -529,49 +576,109 @@ class _ProductosScreenState extends State<ProductosScreen> {
               ),
               ElevatedButton(
                 onPressed: () async {
-                  if (codigoController.text.isNotEmpty &&
-                      nombreController.text.isNotEmpty) {
-                    final nuevoProducto = Producto(
-                      id: producto?.id,
-                      codigo: codigoController.text,
-                      nombreproducto: nombreController.text,
-                      descripcion: descripcionController.text.isNotEmpty
-                          ? descripcionController.text
-                          : null,
-                      cantidad: double.parse(cantidadController.text),
-                      unidadmedida: unidadSeleccionada,
-                      precioproveedor: double.parse(
-                        precioProveedorController.text,
-                      ),
-                      precioventa: double.parse(precioVentaController.text),
-                      ganancia: gananciaCalculada,
-                    );
-
-                    if (isEditing) {
-                      await DatabaseHelper.instance.updateProducto(
-                        nuevoProducto,
-                      );
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Producto actualizado')),
-                      );
-                    } else {
-                      await DatabaseHelper.instance.insertProducto(
-                        nuevoProducto,
-                      );
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Producto agregado')),
-                      );
-                    }
-
-                    Navigator.pop(context);
-                    _cargarProductos();
+                  // Validaciones
+                  if (codigoController.text.trim().isEmpty) {
+                    _mostrarMensaje('El código es requerido', isError: true);
+                    return;
                   }
+                  if (nombreController.text.trim().isEmpty) {
+                    _mostrarMensaje(
+                      'El nombre del producto es requerido',
+                      isError: true,
+                    );
+                    return;
+                  }
+                  if (cantidadController.text.trim().isEmpty) {
+                    _mostrarMensaje('La cantidad es requerida', isError: true);
+                    return;
+                  }
+                  if (precioProveedorController.text.trim().isEmpty) {
+                    _mostrarMensaje(
+                      'El precio proveedor es requerido',
+                      isError: true,
+                    );
+                    return;
+                  }
+                  if (precioVentaController.text.trim().isEmpty) {
+                    _mostrarMensaje(
+                      'El precio venta es requerido',
+                      isError: true,
+                    );
+                    return;
+                  }
+
+                  final double cantidad =
+                      double.tryParse(cantidadController.text) ?? 0;
+                  if (cantidad <= 0) {
+                    _mostrarMensaje(
+                      'La cantidad debe ser mayor a 0',
+                      isError: true,
+                    );
+                    return;
+                  }
+
+                  final double precioProveedor =
+                      double.tryParse(precioProveedorController.text) ?? 0;
+                  if (precioProveedor <= 0) {
+                    _mostrarMensaje(
+                      'El precio proveedor debe ser mayor a 0',
+                      isError: true,
+                    );
+                    return;
+                  }
+
+                  final double precioVenta =
+                      double.tryParse(precioVentaController.text) ?? 0;
+                  if (precioVenta <= 0) {
+                    _mostrarMensaje(
+                      'El precio venta debe ser mayor a 0',
+                      isError: true,
+                    );
+                    return;
+                  }
+
+                  // Crear producto
+                  final nuevoProducto = Producto(
+                    id: producto?.id,
+                    codigo: codigoController.text.trim(),
+                    nombreproducto: nombreController.text.trim(),
+                    descripcion: descripcionController.text.trim().isEmpty
+                        ? null
+                        : descripcionController.text.trim(),
+                    cantidad: cantidad,
+                    unidadmedida: unidadSeleccionada,
+                    precioproveedor: precioProveedor,
+                    precioventa: precioVenta,
+                    ganancia: precioVenta - precioProveedor,
+                  );
+
+                  if (isEditing) {
+                    await DatabaseHelper.instance.updateProducto(nuevoProducto);
+                    _mostrarMensaje('Producto actualizado');
+                  } else {
+                    await DatabaseHelper.instance.insertProducto(nuevoProducto);
+                    _mostrarMensaje('Producto agregado');
+                  }
+
+                  Navigator.pop(context);
+                  _cargarProductos();
                 },
                 child: Text(isEditing ? 'Actualizar' : 'Guardar'),
               ),
             ],
           );
         },
+      ),
+    );
+  }
+
+  void _mostrarMensaje(String mensaje, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(mensaje),
+        backgroundColor: isError ? Colors.red : Colors.green,
+        duration: const Duration(seconds: 2),
       ),
     );
   }

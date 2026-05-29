@@ -17,88 +17,227 @@ class _PedidoScreenState extends State<PedidoScreen> {
   Clientes? _clienteSeleccionado;
   List<ItemPedido> _items = [];
   List<Producto> _productos = [];
-  String _searchQuery = '';
+  double _montoRecibido = 0;
+  double _cambio = 0;
 
   @override
   void initState() {
     super.initState();
     _cargarProductos();
+    _cargarClienteMostrador();
   }
 
   Future<void> _cargarProductos() async {
     try {
       final productos = await DatabaseHelper.instance.getProductos();
-      setState(() {
-        _productos = productos;
-      });
-      print('Productos cargados: ${productos.length}');
+      if (mounted) {
+        setState(() {
+          _productos = productos;
+        });
+      }
     } catch (e) {
       print('Error al cargar productos: $e');
-      _mostrarMensaje('Error al cargar productos', isError: true);
+    }
+  }
+
+  Future<void> _cargarClienteMostrador() async {
+    try {
+      final clientes = await DatabaseHelper.instance.getClientes();
+
+      for (var c in clientes) {
+        if (c.nombrecliente == 'MOSTRADOR') {
+          if (mounted) {
+            setState(() {
+              _clienteSeleccionado = c;
+            });
+          }
+          return;
+        }
+      }
+
+      // Crear cliente MOSTRADOR si no existe
+      final mostrador = Clientes(
+        nombrecliente: 'MOSTRADOR',
+        apellido1: '',
+        apellido2: '',
+        telefono: '000-0000',
+        direccion: 'Venta en tienda',
+      );
+      final id = await DatabaseHelper.instance.insertCliente(mostrador);
+      if (mounted) {
+        setState(() {
+          _clienteSeleccionado = Clientes(
+            idcliente: id,
+            nombrecliente: 'MOSTRADOR',
+            apellido1: '',
+            apellido2: '',
+            telefono: '000-0000',
+            direccion: 'Venta en tienda',
+          );
+        });
+      }
+    } catch (e) {
+      print('Error al cargar cliente mostrador: $e');
     }
   }
 
   double get _total => _items.fold(0.0, (sum, item) => sum + item.subtotal);
 
-  Future<void> _seleccionarCliente() async {
-    try {
-      final clientes = await DatabaseHelper.instance.getClientes();
-
-      if (clientes.isEmpty) {
-        _mostrarMensaje('No hay clientes registrados', isError: true);
-        return;
-      }
-
-      showModalBottomSheet(
-        context: context,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        builder: (context) => Container(
-          height: MediaQuery.of(context).size.height * 0.7,
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              const Text(
-                'Seleccionar Cliente',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const Divider(),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: clientes.length,
-                  itemBuilder: (context, index) {
-                    final cliente = clientes[index];
-                    return Card(
-                      margin: const EdgeInsets.symmetric(vertical: 4),
-                      child: ListTile(
-                        leading: const CircleAvatar(child: Icon(Icons.person)),
-                        title: Text(
-                          '${cliente.nombrecliente} ${cliente.apellido1} ${cliente.apellido2}',
-                        ),
-                        subtitle: Text(cliente.telefono),
-                        onTap: () {
-                          setState(() {
-                            _clienteSeleccionado = cliente;
-                          });
-                          Navigator.pop(context);
-                          _mostrarMensaje(
-                            'Cliente seleccionado: ${cliente.nombrecliente} ${cliente.apellido1}',
-                          );
-                        },
-                      ),
-                    );
+  void _mostrarPantallaPago() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) {
+          return AlertDialog(
+            title: const Text('PAGO'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Total: \$${_total.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Monto recibido',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.money),
+                  ),
+                  onChanged: (value) {
+                    double recibido = double.tryParse(value) ?? 0;
+                    setStateDialog(() {
+                      _montoRecibido = recibido;
+                      _cambio = recibido - _total;
+                    });
                   },
                 ),
+                const SizedBox(height: 20),
+                if (_cambio > 0)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'CAMBIO:',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          '\$${_cambio.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (_cambio < 0)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'FALTAN:',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          '\$${(-_cambio).toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.red,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancelar'),
+              ),
+              ElevatedButton(
+                onPressed: _cambio >= 0
+                    ? () {
+                        Navigator.pop(context);
+                        _confirmarPedido();
+                      }
+                    : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Confirmar Pago'),
               ),
             ],
-          ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _seleccionarCliente() async {
+    final clientes = await DatabaseHelper.instance.getClientes();
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        height: 400,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            const Text(
+              'Seleccionar Cliente',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const Divider(),
+            Expanded(
+              child: ListView.builder(
+                itemCount: clientes.length,
+                itemBuilder: (context, index) {
+                  final cliente = clientes[index];
+                  return ListTile(
+                    leading: const CircleAvatar(child: Icon(Icons.person)),
+                    title: Text(
+                      '${cliente.nombrecliente} ${cliente.apellido1}',
+                    ),
+                    subtitle: Text(cliente.telefono),
+                    onTap: () {
+                      setState(() {
+                        _clienteSeleccionado = cliente;
+                      });
+                      Navigator.pop(context);
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
         ),
-      );
-    } catch (e) {
-      print('Error al seleccionar cliente: $e');
-      _mostrarMensaje('Error al cargar clientes', isError: true);
-    }
+      ),
+    );
   }
 
   Future<void> _abrirScanner() async {
@@ -108,53 +247,32 @@ class _PedidoScreenState extends State<PedidoScreen> {
         builder: (context) => ScannerScreen(
           titulo: 'Escanear producto',
           onCodeScanned: (codigo) async {
-            await _procesarProductoEscaneado(codigo);
+            print('Código escaneado: $codigo');
+
+            // Buscar producto por código
+            Producto? productoEncontrado;
+            for (var p in _productos) {
+              if (p.codigo.toLowerCase() == codigo.toLowerCase()) {
+                productoEncontrado = p;
+                break;
+              }
+            }
+
+            if (productoEncontrado != null) {
+              // Producto existe: mostrar diálogo de cantidad
+              _mostrarDialogoCantidad(productoEncontrado);
+            } else {
+              // Producto NO existe: preguntar si quiere crearlo
+              _mostrarDialogoCrearProducto(codigo);
+            }
           },
         ),
       ),
     );
   }
 
-  Future<void> _procesarProductoEscaneado(String codigo) async {
-    try {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(child: CircularProgressIndicator()),
-      );
-
-      final productos = await DatabaseHelper.instance.getProductos();
-
-      Producto? productoEncontrado;
-      for (var producto in productos) {
-        if (producto.codigo.toLowerCase() == codigo.toLowerCase()) {
-          productoEncontrado = producto;
-          break;
-        }
-      }
-
-      if (Navigator.canPop(context)) {
-        Navigator.pop(context);
-      }
-
-      if (productoEncontrado != null) {
-        _mostrarDialogoCantidad(productoEncontrado);
-      } else {
-        _mostrarProductoNoEncontrado(codigo);
-      }
-    } catch (e) {
-      if (Navigator.canPop(context)) {
-        Navigator.pop(context);
-      }
-      _mostrarMensaje(
-        'Error al buscar producto: ${e.toString()}',
-        isError: true,
-      );
-      print('Error en escaneo: $e');
-    }
-  }
-
-  void _mostrarProductoNoEncontrado(String codigo) {
+  // Diálogo para crear producto desde escáner
+  void _mostrarDialogoCrearProducto(String codigo) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -167,12 +285,12 @@ class _PedidoScreenState extends State<PedidoScreen> {
             const Icon(Icons.qr_code_scanner, size: 50, color: Colors.orange),
             const SizedBox(height: 16),
             Text(
-              'El código "$codigo" no está registrado en el catálogo.',
+              'El código "$codigo" no está registrado.',
               style: const TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 16),
             const Text(
-              '¿Qué deseas hacer?',
+              '¿Deseas crear un nuevo producto con este código?',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
           ],
@@ -181,14 +299,14 @@ class _PedidoScreenState extends State<PedidoScreen> {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              _abrirScanner();
+              _abrirScanner(); // Volver a escanear
             },
             child: const Text('Escanear otro'),
           ),
           ElevatedButton.icon(
             onPressed: () {
               Navigator.pop(context);
-              _crearProductoConCodigo(codigo);
+              _crearProductoDesdeEscaneo(codigo);
             },
             icon: const Icon(Icons.add),
             label: const Text('Crear producto'),
@@ -202,44 +320,19 @@ class _PedidoScreenState extends State<PedidoScreen> {
     );
   }
 
-  void _crearProductoConCodigo(String codigo) async {
-    final nuevoProducto = Producto(
-      codigo: codigo,
-      nombreproducto: '',
-      cantidad: 0,
-      unidadmedida: 'pza',
-      precioproveedor: 0,
-      precioventa: 0,
-      ganancia: 0,
-    );
-
-    await _agregarEditarProductoConCodigo(nuevoProducto);
-  }
-
-  Future<void> _agregarEditarProductoConCodigo(
-    Producto productoConCodigo,
-  ) async {
-    final nombreController = TextEditingController(
-      text: productoConCodigo.nombreproducto,
-    );
-    final descripcionController = TextEditingController(
-      text: productoConCodigo.descripcion ?? '',
-    );
-    final cantidadController = TextEditingController(
-      text: productoConCodigo.cantidad.toString(),
-    );
-    final precioProveedorController = TextEditingController(
-      text: productoConCodigo.precioproveedor.toString(),
-    );
-    final precioVentaController = TextEditingController(
-      text: productoConCodigo.precioventa.toString(),
-    );
+  // Crear producto desde código escaneado
+  // Crear producto desde código escaneado
+  Future<void> _crearProductoDesdeEscaneo(String codigo) async {
+    final nombreController = TextEditingController();
+    final precioProveedorController = TextEditingController();
+    final precioVentaController = TextEditingController();
+    final stockController = TextEditingController(text: '0');
 
     final unidades = ['pza', 'kg', 'lts', 'doc', 'caja', 'paquete'];
-    String unidadSeleccionada = productoConCodigo.unidadmedida;
+    String unidadSeleccionada = 'pza';
     double gananciaCalculada = 0;
 
-    showDialog(
+    await showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setStateDialog) {
@@ -249,17 +342,19 @@ class _PedidoScreenState extends State<PedidoScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Código (solo lectura)
                   TextField(
-                    controller: TextEditingController(
-                      text: productoConCodigo.codigo,
-                    ),
+                    controller: TextEditingController(text: codigo),
                     decoration: const InputDecoration(
-                      labelText: 'Código *',
+                      labelText: 'Código',
                       border: OutlineInputBorder(),
                     ),
                     readOnly: true,
+                    enabled: false,
                   ),
                   const SizedBox(height: 12),
+
+                  // Nombre
                   TextField(
                     controller: nombreController,
                     decoration: const InputDecoration(
@@ -269,22 +364,15 @@ class _PedidoScreenState extends State<PedidoScreen> {
                     autofocus: true,
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: descripcionController,
-                    decoration: const InputDecoration(
-                      labelText: 'Descripción',
-                      border: OutlineInputBorder(),
-                    ),
-                    maxLines: 2,
-                  ),
-                  const SizedBox(height: 12),
+
+                  // Stock y unidad
                   Row(
                     children: [
                       Expanded(
                         child: TextField(
-                          controller: cantidadController,
+                          controller: stockController,
                           decoration: const InputDecoration(
-                            labelText: 'Stock *',
+                            labelText: 'Stock inicial',
                             border: OutlineInputBorder(),
                           ),
                           keyboardType: TextInputType.number,
@@ -316,6 +404,8 @@ class _PedidoScreenState extends State<PedidoScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
+
+                  // Precio Proveedor y Precio Venta
                   Row(
                     children: [
                       Expanded(
@@ -364,6 +454,8 @@ class _PedidoScreenState extends State<PedidoScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
+
+                  // Mostrar ganancia calculada
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
@@ -407,36 +499,46 @@ class _PedidoScreenState extends State<PedidoScreen> {
               ),
               ElevatedButton(
                 onPressed: () async {
-                  if (nombreController.text.isNotEmpty) {
+                  if (nombreController.text.isNotEmpty &&
+                      precioVentaController.text.isNotEmpty &&
+                      precioProveedorController.text.isNotEmpty) {
+                    final double precioProveedor = double.parse(
+                      precioProveedorController.text,
+                    );
+                    final double precioVenta = double.parse(
+                      precioVentaController.text,
+                    );
+                    final double ganancia = precioVenta - precioProveedor;
+
                     final nuevoProducto = Producto(
-                      codigo: productoConCodigo.codigo,
+                      codigo: codigo,
                       nombreproducto: nombreController.text,
-                      descripcion: descripcionController.text.isNotEmpty
-                          ? descripcionController.text
-                          : null,
-                      cantidad: double.parse(cantidadController.text),
+                      descripcion: null,
+                      cantidad: double.tryParse(stockController.text) ?? 0,
                       unidadmedida: unidadSeleccionada,
-                      precioproveedor: double.parse(
-                        precioProveedorController.text,
-                      ),
-                      precioventa: double.parse(precioVentaController.text),
-                      ganancia: gananciaCalculada,
+                      precioproveedor: precioProveedor,
+                      precioventa: precioVenta,
+                      ganancia: ganancia,
                     );
 
                     await DatabaseHelper.instance.insertProducto(nuevoProducto);
-                    Navigator.pop(context);
-                    _cargarProductos();
+                    await _cargarProductos(); // Recargar lista
 
                     if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Producto creado exitosamente'),
-                        ),
+                      Navigator.pop(context);
+                      _mostrarMensaje('Producto creado exitosamente');
+
+                      // Buscar el producto recién creado y agregarlo al pedido
+                      final productoAgregar = _productos.firstWhere(
+                        (p) => p.codigo.toLowerCase() == codigo.toLowerCase(),
                       );
+                      _mostrarDialogoCantidad(productoAgregar);
                     }
+                  } else {
+                    _mostrarMensaje('Complete todos los campos', isError: true);
                   }
                 },
-                child: const Text('Crear'),
+                child: const Text('Crear y agregar'),
               ),
             ],
           );
@@ -446,19 +548,10 @@ class _PedidoScreenState extends State<PedidoScreen> {
   }
 
   Future<void> _agregarProducto() async {
-    print('Botón agregar producto presionado');
-    print('Productos disponibles: ${_productos.length}');
-
     if (_productos.isEmpty) {
-      _mostrarMensaje(
-        'No hay productos registrados. Agrega productos primero.',
-        isError: true,
-      );
+      _mostrarMensaje('No hay productos registrados', isError: true);
       return;
     }
-
-    List<Producto> productosFiltrados = _productos;
-    String searchQuery = '';
 
     showModalBottomSheet(
       context: context,
@@ -466,101 +559,71 @@ class _PedidoScreenState extends State<PedidoScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => StatefulBuilder(
-        builder: (context, setStateModal) {
-          return Container(
-            height: MediaQuery.of(context).size.height * 0.8,
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                const Text(
-                  'Agregar Producto',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  onChanged: (value) {
-                    setStateModal(() {
-                      searchQuery = value;
-                      if (value.isEmpty) {
-                        productosFiltrados = _productos;
-                      } else {
-                        productosFiltrados = _productos
-                            .where(
-                              (p) =>
-                                  p.nombreproducto.toLowerCase().contains(
-                                    value.toLowerCase(),
-                                  ) ||
-                                  p.codigo.toLowerCase().contains(
-                                    value.toLowerCase(),
-                                  ),
-                            )
-                            .toList();
-                      }
-                    });
-                  },
-                  decoration: InputDecoration(
-                    hintText: 'Buscar por nombre o código',
-                    prefixIcon: const Icon(Icons.search),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: productosFiltrados.isEmpty
-                      ? const Center(child: Text('No se encontraron productos'))
-                      : ListView.builder(
-                          itemCount: productosFiltrados.length,
-                          itemBuilder: (context, index) {
-                            final producto = productosFiltrados[index];
-                            return Card(
-                              margin: const EdgeInsets.symmetric(vertical: 4),
-                              child: ListTile(
-                                leading: CircleAvatar(
-                                  backgroundColor: Colors.blue.shade100,
-                                  child: Text(producto.codigo.substring(0, 1)),
-                                ),
-                                title: Text(producto.nombreproducto),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text('Código: ${producto.codigo}'),
-                                    Text(
-                                      'Stock: ${producto.cantidad.toStringAsFixed(0)} ${producto.unidadmedida}',
-                                    ),
-                                    Text(
-                                      'Precio: \$${producto.precioventa.toStringAsFixed(2)}',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                trailing: ElevatedButton(
-                                  onPressed: () {
-                                    Navigator.pop(context);
-                                    _mostrarDialogoCantidad(producto);
-                                  },
-                                  child: const Text('Agregar'),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                ),
-              ],
+      builder: (context) => Container(
+        height: 500,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            const Text(
+              'Agregar Producto',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
-          );
-        },
+            const Divider(),
+            Expanded(
+              child: ListView.builder(
+                itemCount: _productos.length,
+                itemBuilder: (context, index) {
+                  final producto = _productos[index];
+                  return Card(
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: Colors.blue.shade100,
+                        child: Text(producto.codigo.substring(0, 1)),
+                      ),
+                      title: Text(producto.nombreproducto),
+                      subtitle: Text(
+                        '\$${producto.precioventa.toStringAsFixed(2)} - Stock: ${producto.cantidad}',
+                      ),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _mostrarDialogoCantidad(producto);
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   void _mostrarDialogoCantidad(Producto producto) {
+    // Verificar si el producto ya está en el pedido
+    final itemExistente = _items.firstWhere(
+      (item) => item.producto.id == producto.id,
+      orElse: () => ItemPedido(producto: producto, cantidad: 0),
+    );
+
+    // Calcular stock disponible REAL
+    final int stockDisponible = producto.cantidad.toInt();
+    final int yaEnPedido = itemExistente.cantidad;
+    final int stockRestante = stockDisponible - yaEnPedido;
+
     int cantidad = 1;
-    final stockDisponible = producto.cantidad;
+
+    // Si no hay stock disponible, mostrar mensaje
+    if (stockRestante <= 0) {
+      _mostrarMensaje(
+        'No hay suficiente stock.\n'
+        'Stock disponible: $stockDisponible ${producto.unidadmedida}\n'
+        'Ya tienes $yaEnPedido en el pedido.',
+        isError: true,
+      );
+      return;
+    }
 
     showDialog(
       context: context,
@@ -572,28 +635,24 @@ class _PedidoScreenState extends State<PedidoScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Stock disponible: ${stockDisponible.toStringAsFixed(0)} ${producto.unidadmedida}',
+                  'Stock disponible: $stockDisponible ${producto.unidadmedida}',
                 ),
+                Text('Ya en pedido: $yaEnPedido ${producto.unidadmedida}'),
+                Text('Puedes agregar: $stockRestante ${producto.unidadmedida}'),
                 const SizedBox(height: 16),
-                Text(
-                  'Precio unitario: \$${producto.precioventa.toStringAsFixed(2)}',
-                ),
+                Text('Precio: \$${producto.precioventa.toStringAsFixed(2)}'),
                 const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     IconButton(
-                      onPressed: () {
-                        if (cantidad > 1) {
-                          setStateDialog(() => cantidad--);
-                        }
-                      },
-                      icon: const Icon(Icons.remove_circle),
-                      iconSize: 40,
+                      onPressed: () => setStateDialog(() {
+                        if (cantidad > 1) cantidad--;
+                      }),
+                      icon: const Icon(Icons.remove_circle, size: 40),
                     ),
                     Container(
                       width: 60,
-                      margin: const EdgeInsets.symmetric(horizontal: 16),
                       child: TextField(
                         textAlign: TextAlign.center,
                         controller: TextEditingController(
@@ -602,8 +661,14 @@ class _PedidoScreenState extends State<PedidoScreen> {
                         keyboardType: TextInputType.number,
                         onChanged: (value) {
                           final newValue = int.tryParse(value);
-                          if (newValue != null && newValue > 0) {
+                          if (newValue != null &&
+                              newValue >= 1 &&
+                              newValue <= stockRestante) {
                             setStateDialog(() => cantidad = newValue);
+                          } else if (newValue != null &&
+                              newValue > stockRestante) {
+                            // Si el usuario ingresa un número mayor, limitar al máximo
+                            setStateDialog(() => cantidad = stockRestante);
                           }
                         },
                         decoration: const InputDecoration(
@@ -612,29 +677,20 @@ class _PedidoScreenState extends State<PedidoScreen> {
                       ),
                     ),
                     IconButton(
-                      onPressed: () {
-                        if (cantidad < stockDisponible) {
-                          setStateDialog(() => cantidad++);
-                        }
-                      },
-                      icon: const Icon(Icons.add_circle),
-                      iconSize: 40,
+                      onPressed: () => setStateDialog(() {
+                        if (cantidad < stockRestante) cantidad++;
+                      }),
+                      icon: const Icon(Icons.add_circle, size: 40),
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Subtotal: \$${(producto.precioventa * cantidad).toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  'Total a pagar: \$${(producto.precioventa * (yaEnPedido + cantidad)).toStringAsFixed(2)}',
                 ),
-                if (cantidad > stockDisponible)
-                  const Text(
-                    '⚠️ Cantidad excede el stock disponible',
-                    style: TextStyle(color: Colors.red),
-                  ),
+                Text(
+                  'Subtotal esta compra: \$${(producto.precioventa * cantidad).toStringAsFixed(2)}',
+                ),
               ],
             ),
             actions: [
@@ -644,19 +700,24 @@ class _PedidoScreenState extends State<PedidoScreen> {
               ),
               ElevatedButton(
                 onPressed: () {
-                  if (cantidad <= stockDisponible && cantidad > 0) {
+                  if (cantidad >= 1 && cantidad <= stockRestante) {
                     setState(() {
-                      _items.add(
-                        ItemPedido(producto: producto, cantidad: cantidad),
-                      );
+                      if (itemExistente.cantidad > 0) {
+                        // Actualizar cantidad existente (sumar)
+                        itemExistente.cantidad += cantidad;
+                      } else {
+                        // Agregar nuevo item
+                        _items.add(
+                          ItemPedido(producto: producto, cantidad: cantidad),
+                        );
+                      }
                     });
                     Navigator.pop(context);
-                    _mostrarMensaje('${producto.nombreproducto} agregado');
-                  } else {
                     _mostrarMensaje(
-                      'Cantidad no válida o excede stock',
-                      isError: true,
+                      'Se agregaron $cantidad ${producto.nombreproducto} al pedido',
                     );
+                  } else {
+                    _mostrarMensaje('Cantidad no válida', isError: true);
                   }
                 },
                 child: const Text('Agregar'),
@@ -691,52 +752,11 @@ class _PedidoScreenState extends State<PedidoScreen> {
       _mostrarMensaje('Debes seleccionar un cliente', isError: true);
       return;
     }
-
     if (_items.isEmpty) {
       _mostrarMensaje('Debes agregar al menos un producto', isError: true);
       return;
     }
-
-    for (var item in _items) {
-      if (!item.hayStock) {
-        _mostrarMensaje(item.advertenciaStock, isError: true);
-        return;
-      }
-    }
-
-    final confirmar = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Confirmar Pedido'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Cliente: ${_clienteSeleccionado!.nombrecliente} ${_clienteSeleccionado!.apellido1}',
-            ),
-            const SizedBox(height: 8),
-            Text('Productos: ${_items.length}'),
-            const SizedBox(height: 8),
-            Text('Total: \$${_total.toStringAsFixed(2)}'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Confirmar'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmar == true) {
-      await _guardarPedido();
-    }
+    await _guardarPedido();
   }
 
   Future<void> _guardarPedido() async {
@@ -747,7 +767,6 @@ class _PedidoScreenState extends State<PedidoScreen> {
         'total': _total,
         'status': 'PENDIENTE',
       };
-
       final idPedido = await DatabaseHelper.instance.insertPedido(pedidoMap);
 
       for (var item in _items) {
@@ -771,23 +790,30 @@ class _PedidoScreenState extends State<PedidoScreen> {
 
       _mostrarMensaje('¡Pedido guardado exitosamente!');
 
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ResumenPedidoScreen(
-            cliente: _clienteSeleccionado!,
-            items: _items,
-            total: _total,
-            fecha: DateTime.now(),
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ResumenPedidoScreen(
+              cliente: _clienteSeleccionado!,
+              items: _items,
+              total: _total,
+              fecha: DateTime.now(),
+              montoRecibido: _montoRecibido,
+              cambio: _cambio,
+            ),
           ),
-        ),
-      ).then((_) {
-        setState(() {
-          _clienteSeleccionado = null;
-          _items.clear();
-          _cargarProductos();
+        ).then((_) {
+          setState(() {
+            _clienteSeleccionado = null;
+            _items.clear();
+            _montoRecibido = 0;
+            _cambio = 0;
+            _cargarProductos();
+            _cargarClienteMostrador();
+          });
         });
-      });
+      }
     } catch (e) {
       print('Error al guardar pedido: $e');
       _mostrarMensaje('Error al guardar pedido: $e', isError: true);
@@ -817,6 +843,7 @@ class _PedidoScreenState extends State<PedidoScreen> {
       ),
       body: Column(
         children: [
+          // Tarjeta del cliente
           Card(
             margin: const EdgeInsets.all(16),
             elevation: 4,
@@ -825,25 +852,40 @@ class _PedidoScreenState extends State<PedidoScreen> {
             ),
             child: ListTile(
               leading: CircleAvatar(
-                backgroundColor: Colors.blue.shade100,
-                child: const Icon(Icons.business, color: Colors.blue),
+                backgroundColor:
+                    _clienteSeleccionado?.nombrecliente == 'MOSTRADOR'
+                    ? Colors.green.shade100
+                    : Colors.blue.shade100,
+                child: Icon(
+                  _clienteSeleccionado?.nombrecliente == 'MOSTRADOR'
+                      ? Icons.store
+                      : Icons.business,
+                  color: _clienteSeleccionado?.nombrecliente == 'MOSTRADOR'
+                      ? Colors.green
+                      : Colors.blue,
+                ),
               ),
               title: Text(
-                _clienteSeleccionado != null
-                    ? '${_clienteSeleccionado!.nombrecliente} ${_clienteSeleccionado!.apellido1}'
-                    : 'Cliente no seleccionado',
+                _clienteSeleccionado?.nombrecliente == 'MOSTRADOR'
+                    ? 'MOSTRADOR (Venta directa)'
+                    : '${_clienteSeleccionado?.nombrecliente ?? "Sin cliente"} ${_clienteSeleccionado?.apellido1 ?? ""}',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               subtitle: Text(
-                _clienteSeleccionado?.direccion ?? 'Toca para seleccionar',
+                _clienteSeleccionado?.nombrecliente == 'MOSTRADOR'
+                    ? 'Venta en tienda - No requiere datos'
+                    : _clienteSeleccionado?.direccion ??
+                          'Toca para seleccionar',
               ),
               trailing: IconButton(
-                icon: const Icon(Icons.edit),
+                icon: const Icon(Icons.swap_horiz),
                 onPressed: _seleccionarCliente,
+                tooltip: 'Cambiar cliente',
               ),
             ),
           ),
 
+          // Lista de productos
           Expanded(
             child: _items.isEmpty
                 ? const Center(
@@ -871,25 +913,11 @@ class _PedidoScreenState extends State<PedidoScreen> {
                             child: Text('${item.cantidad}'),
                           ),
                           title: Text(item.producto.nombreproducto),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${item.cantidad} x \$${item.producto.precioventa.toStringAsFixed(2)}',
-                              ),
-                              if (!item.hayStock)
-                                Text(
-                                  item.advertenciaStock,
-                                  style: const TextStyle(
-                                    color: Colors.red,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                            ],
+                          subtitle: Text(
+                            '${item.cantidad} x \$${item.producto.precioventa.toStringAsFixed(2)}',
                           ),
                           trailing: Row(
-                            mainAxisSize: MainAxisSize
-                                .min, // evita que el Row ocupe todo el ancho
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
                                 '\$${item.subtotal.toStringAsFixed(2)}',
@@ -897,17 +925,11 @@ class _PedidoScreenState extends State<PedidoScreen> {
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              const SizedBox(
-                                width: 8,
-                              ), // espacio entre texto y botón
-                              ElevatedButton.icon(
+                              const SizedBox(width: 8),
+                              IconButton(
                                 icon: const Icon(
                                   Icons.delete,
-                                  color: Colors.white,
-                                ),
-                                label: const Text('Eliminar'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red,
+                                  color: Colors.red,
                                 ),
                                 onPressed: () => _eliminarItem(index),
                               ),
@@ -919,6 +941,7 @@ class _PedidoScreenState extends State<PedidoScreen> {
                   ),
           ),
 
+          // Total y botón COBRAR
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -959,12 +982,9 @@ class _PedidoScreenState extends State<PedidoScreen> {
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton.icon(
-                    onPressed: _confirmarPedido,
-                    icon: const Icon(Icons.check_circle),
-                    label: const Text(
-                      'CONFIRMAR PEDIDO',
-                      style: TextStyle(fontSize: 18),
-                    ),
+                    onPressed: _items.isEmpty ? null : _mostrarPantallaPago,
+                    icon: const Icon(Icons.payment),
+                    label: const Text('COBRAR', style: TextStyle(fontSize: 18)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
                       foregroundColor: Colors.white,
