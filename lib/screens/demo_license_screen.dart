@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'home_screen.dart';
 
 class DemoLicenseScreen extends StatefulWidget {
@@ -13,8 +14,7 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
   bool _isLoading = true;
   bool _isValid = false;
   String _mensaje = '';
-  final TextEditingController _codigoController =
-      TextEditingController(); // ✅ Controlador para el texto
+  final TextEditingController _codigoController = TextEditingController();
 
   @override
   void initState() {
@@ -24,14 +24,27 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
 
   @override
   void dispose() {
-    _codigoController.dispose(); // ✅ Liberar recursos
+    _codigoController.dispose();
     super.dispose();
+  }
+
+  void launchUrlString(String url) async {
+    final Uri uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se puede abrir el enlace'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Future<void> _verificarLicencia() async {
     final prefs = await SharedPreferences.getInstance();
 
-    // Verificar si ya fue activada (versión pagada)
     bool esPagada = prefs.getBool('licencia_activada') ?? false;
 
     if (esPagada) {
@@ -43,7 +56,6 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
       return;
     }
 
-    // Versión demo: verificar fecha de instalación
     int? fechaInstalacion = prefs.getInt('fecha_instalacion');
     int ahora = DateTime.now().millisecondsSinceEpoch;
 
@@ -53,9 +65,6 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
     }
 
     int diasTranscurridos = (ahora - fechaInstalacion) ~/ (1000 * 60 * 60 * 24);
-
-    // int diasTranscurridos =
-    //     15; // Para pruebas rápidas, puedes simular días transcurridos
     int diasRestantes = 15 - diasTranscurridos;
 
     if (diasRestantes <= 0) {
@@ -75,7 +84,6 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
     }
   }
 
-  // ✅ MÉTODO PARA ACTIVAR LICENCIA (AHORA SÍ FUNCIONA)
   Future<void> _activarLicencia() async {
     String codigo = _codigoController.text.trim();
 
@@ -89,14 +97,10 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
       return;
     }
 
-    // 🔐 Aquí defines los códigos válidos
-    // Puedes tener múltiples códigos para diferentes clientes
     Map<String, String> codigosValidos = {
       'FARMACIAJB2026HV': 'Licencia Comercial',
       'TIMABH2026': 'Feterias',
       'CLIENTET29580': 'Licencia Comercial',
-
-      // Agrega más códigos según tus clientes
     };
 
     if (codigosValidos.containsKey(codigo)) {
@@ -110,8 +114,7 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
           backgroundColor: Colors.green,
         ),
       );
-
-      _verificarLicencia(); // Recargar estado
+      _verificarLicencia();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -126,7 +129,7 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Center(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -147,6 +150,7 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
               ),
               const SizedBox(height: 30),
 
+              // Título
               const Text(
                 'PEDIDOS APP',
                 style: TextStyle(
@@ -157,6 +161,7 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
               ),
               const SizedBox(height: 10),
 
+              // Badge demo
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
@@ -173,6 +178,7 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
               ),
               const SizedBox(height: 40),
 
+              // Mensaje de estado
               if (_isLoading)
                 const CircularProgressIndicator()
               else
@@ -187,6 +193,7 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
 
               const SizedBox(height: 30),
 
+              // Botón continuar
               if (_isValid && !_isLoading)
                 SizedBox(
                   width: double.infinity,
@@ -211,7 +218,7 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
                   ),
                 ),
 
-              //  SECCIÓN DE ACTIVACIÓN (ahora funciona correctamente)
+              // Sección de activación
               if (!_isValid && !_isLoading)
                 Column(
                   children: [
@@ -226,7 +233,7 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
                       children: [
                         Expanded(
                           child: TextField(
-                            controller: _codigoController, //  Conectado
+                            controller: _codigoController,
                             decoration: const InputDecoration(
                               hintText: 'Código de activación',
                               border: OutlineInputBorder(),
@@ -237,7 +244,7 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
                         ),
                         const SizedBox(width: 10),
                         ElevatedButton(
-                          onPressed: _activarLicencia, //
+                          onPressed: _activarLicencia,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.green,
                             padding: const EdgeInsets.symmetric(
@@ -262,10 +269,96 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
 
               const SizedBox(height: 30),
 
-              Text(
-                '📞 hvbrayan@hotmail.com | Tel: +52 6635137212',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              // ========== SECCIÓN DE CONTACTO ==========
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Column(
+                  children: [
+                    const Text(
+                      '📞 Contacto para activar licencia:',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Email
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.email, size: 16, color: Colors.blue),
+                        const SizedBox(width: 4),
+                        Text(
+                          'hvbrayan@hotmail.com',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.blue.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    // Teléfono
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.phone, size: 16, color: Colors.green),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Tel: +52 6635137212',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.green.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Botón WhatsApp
+                    InkWell(
+                      onTap: () {
+                        final String url = '';
+                        // 'https://api.whatsapp.com/send?phone=526635137212&text=Hola%2C%20me%20interesa%20adquirir%20la%20licencia%20de%20la%20app';
+                        // launchUrlString(url);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.green.shade200),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.chat,
+                              size: 16,
+                              color: Colors.green.shade700,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'WhatsApp',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.green.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
