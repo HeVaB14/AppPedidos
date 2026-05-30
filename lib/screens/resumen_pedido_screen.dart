@@ -6,10 +6,11 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/clientes.dart';
 import '../models/item_pedido.dart';
 
-class ResumenPedidoScreen extends StatelessWidget {
+class ResumenPedidoScreen extends StatefulWidget {
   final Clientes cliente;
   final List<ItemPedido> items;
   final double total;
@@ -27,6 +28,31 @@ class ResumenPedidoScreen extends StatelessWidget {
     this.cambio = 0,
   });
 
+  @override
+  State<ResumenPedidoScreen> createState() => _ResumenPedidoScreenState();
+}
+
+class _ResumenPedidoScreenState extends State<ResumenPedidoScreen> {
+  String _empresaNombre = 'Pedidos App';
+  String _empresaTelefono = '';
+  String _empresaDireccion = '';
+  String _empresaSitio = 'pedidosapp.com';
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarDatosEmpresa();
+  }
+
+  Future<void> _cargarDatosEmpresa() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _empresaNombre = prefs.getString('empresa_nombre') ?? 'Pedidos App';
+      _empresaTelefono = prefs.getString('empresa_telefono') ?? '';
+      _empresaDireccion = prefs.getString('empresa_direccion') ?? '';
+    });
+  }
+
   Future<pw.Document> _generarPDF() async {
     final pdf = pw.Document();
 
@@ -41,16 +67,33 @@ class ResumenPedidoScreen extends StatelessWidget {
                 child: pw.Column(
                   children: [
                     pw.Text(
-                      'PEDIDO DE VENTA',
+                      _empresaNombre,
                       style: pw.TextStyle(
                         fontSize: 28,
                         fontWeight: pw.FontWeight.bold,
                       ),
                     ),
-                    pw.SizedBox(height: 10),
+                    pw.SizedBox(height: 5),
+                    if (_empresaTelefono.isNotEmpty)
+                      pw.Text(
+                        'Tel: $_empresaTelefono',
+                        style: const pw.TextStyle(fontSize: 10),
+                      ),
+                    if (_empresaDireccion.isNotEmpty)
+                      pw.Text(
+                        _empresaDireccion,
+                        style: const pw.TextStyle(fontSize: 10),
+                        textAlign: pw.TextAlign.center,
+                      ),
+                    pw.SizedBox(height: 5),
                     pw.Text(
-                      'Folio: ${fecha.millisecondsSinceEpoch}',
-                      style: const pw.TextStyle(fontSize: 14),
+                      'Ticket de Venta',
+                      style: const pw.TextStyle(fontSize: 16),
+                    ),
+                    pw.SizedBox(height: 5),
+                    pw.Text(
+                      'Folio: ${widget.fecha.millisecondsSinceEpoch}',
+                      style: const pw.TextStyle(fontSize: 12),
                     ),
                   ],
                 ),
@@ -67,13 +110,13 @@ class ResumenPedidoScreen extends StatelessWidget {
               ),
               pw.SizedBox(height: 10),
               pw.Text(
-                'Nombre: ${cliente.nombrecliente} ${cliente.apellido1} ${cliente.apellido2}',
+                'Nombre: ${widget.cliente.nombrecliente} ${widget.cliente.apellido1} ${widget.cliente.apellido2}',
               ),
-              pw.Text('Teléfono: ${cliente.telefono}'),
-              pw.Text('Dirección: ${cliente.direccion}'),
+              pw.Text('Teléfono: ${widget.cliente.telefono}'),
+              pw.Text('Dirección: ${widget.cliente.direccion}'),
               pw.SizedBox(height: 20),
 
-              pw.Text('Fecha: ${fecha.toString().substring(0, 16)}'),
+              pw.Text('Fecha: ${widget.fecha.toString().substring(0, 16)}'),
               pw.SizedBox(height: 20),
 
               pw.Text(
@@ -104,7 +147,7 @@ class ResumenPedidoScreen extends StatelessWidget {
                       _celda('Subtotal', alinearDerecha: true),
                     ],
                   ),
-                  ...items.asMap().entries.map((entry) {
+                  ...widget.items.asMap().entries.map((entry) {
                     final index = entry.key;
                     final item = entry.value;
                     return pw.TableRow(
@@ -134,7 +177,7 @@ class ResumenPedidoScreen extends StatelessWidget {
                     ),
                   ),
                   pw.Text(
-                    '\$${total.toStringAsFixed(2)}',
+                    '\$${widget.total.toStringAsFixed(2)}',
                     style: pw.TextStyle(
                       fontSize: 20,
                       fontWeight: pw.FontWeight.bold,
@@ -143,7 +186,7 @@ class ResumenPedidoScreen extends StatelessWidget {
                 ],
               ),
 
-              if (montoRecibido > 0) ...[
+              if (widget.montoRecibido > 0) ...[
                 pw.SizedBox(height: 10),
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -153,7 +196,7 @@ class ResumenPedidoScreen extends StatelessWidget {
                       style: const pw.TextStyle(fontSize: 14),
                     ),
                     pw.Text(
-                      '\$${montoRecibido.toStringAsFixed(2)}',
+                      '\$${widget.montoRecibido.toStringAsFixed(2)}',
                       style: const pw.TextStyle(fontSize: 14),
                     ),
                   ],
@@ -169,7 +212,7 @@ class ResumenPedidoScreen extends StatelessWidget {
                       ),
                     ),
                     pw.Text(
-                      '\$${cambio.toStringAsFixed(2)}',
+                      '\$${widget.cambio.toStringAsFixed(2)}',
                       style: pw.TextStyle(
                         fontSize: 14,
                         fontWeight: pw.FontWeight.bold,
@@ -184,12 +227,21 @@ class ResumenPedidoScreen extends StatelessWidget {
               pw.Divider(),
               pw.SizedBox(height: 10),
               pw.Center(
-                child: pw.Text(
-                  '¡Gracias por su compra!,pedidosapp.com',
-                  style: pw.TextStyle(
-                    fontSize: 12,
-                    fontStyle: pw.FontStyle.italic,
-                  ),
+                child: pw.Column(
+                  children: [
+                    pw.Text(
+                      '¡Gracias por su compra!',
+                      style: pw.TextStyle(
+                        fontSize: 12,
+                        fontStyle: pw.FontStyle.italic,
+                      ),
+                    ),
+                    pw.SizedBox(height: 4),
+                    pw.Text(
+                      'Tel: $_empresaTelefono - $_empresaSitio',
+                      style: const pw.TextStyle(fontSize: 10),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -219,10 +271,12 @@ class ResumenPedidoScreen extends StatelessWidget {
       final pdfBytes = await pdf.save();
       final tempDir = await getTemporaryDirectory();
       final file = File(
-        '${tempDir.path}/ticket_${fecha.millisecondsSinceEpoch}.pdf',
+        '${tempDir.path}/ticket_${widget.fecha.millisecondsSinceEpoch}.pdf',
       );
       await file.writeAsBytes(pdfBytes);
-      await Share.shareXFiles([XFile(file.path)], text: 'Ticket de venta');
+      await Share.shareXFiles([
+        XFile(file.path),
+      ], text: 'Ticket de venta - $_empresaNombre');
     } catch (e) {
       debugPrint('Error al compartir: $e');
     }
@@ -275,13 +329,31 @@ class ResumenPedidoScreen extends StatelessWidget {
                       children: [
                         const Icon(Icons.store, size: 48, color: Colors.green),
                         const SizedBox(height: 8),
-                        const Text(
-                          'PEDIDOS APP',
-                          style: TextStyle(
+                        Text(
+                          _empresaNombre,
+                          style: const TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
+                        if (_empresaTelefono.isNotEmpty)
+                          Text(
+                            'Tel: $_empresaTelefono',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        if (_empresaDireccion.isNotEmpty)
+                          Text(
+                            _empresaDireccion,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.grey.shade600,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        const SizedBox(height: 4),
                         Text(
                           'Ticket de Venta',
                           style: TextStyle(
@@ -291,7 +363,7 @@ class ResumenPedidoScreen extends StatelessWidget {
                         ),
                         const Divider(),
                         Text(
-                          DateFormat('dd/MM/yyyy HH:mm').format(fecha),
+                          DateFormat('dd/MM/yyyy HH:mm').format(widget.fecha),
                           style: TextStyle(
                             fontSize: 11,
                             color: Colors.grey.shade500,
@@ -302,7 +374,7 @@ class ResumenPedidoScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Cliente: ${cliente.nombrecliente} ${cliente.apellido1} ${cliente.apellido2}',
+                    'Cliente: ${widget.cliente.nombrecliente} ${widget.cliente.apellido1} ${widget.cliente.apellido2}',
                     style: const TextStyle(fontSize: 13),
                   ),
                   const SizedBox(height: 8),
@@ -314,10 +386,10 @@ class ResumenPedidoScreen extends StatelessWidget {
                   ListView.separated(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    itemCount: items.length,
+                    itemCount: widget.items.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 4),
                     itemBuilder: (context, index) {
-                      final item = items[index];
+                      final item = widget.items[index];
                       return Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -350,7 +422,7 @@ class ResumenPedidoScreen extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        '\$${total.toStringAsFixed(2)}',
+                        '\$${widget.total.toStringAsFixed(2)}',
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -359,7 +431,7 @@ class ResumenPedidoScreen extends StatelessWidget {
                       ),
                     ],
                   ),
-                  if (montoRecibido > 0) ...[
+                  if (widget.montoRecibido > 0) ...[
                     const SizedBox(height: 12),
                     Container(
                       padding: const EdgeInsets.all(8),
@@ -377,7 +449,7 @@ class ResumenPedidoScreen extends StatelessWidget {
                                 style: TextStyle(fontSize: 12),
                               ),
                               Text(
-                                '\$${montoRecibido.toStringAsFixed(2)}',
+                                '\$${widget.montoRecibido.toStringAsFixed(2)}',
                                 style: const TextStyle(fontSize: 12),
                               ),
                             ],
@@ -394,7 +466,7 @@ class ResumenPedidoScreen extends StatelessWidget {
                                 ),
                               ),
                               Text(
-                                '\$${cambio.toStringAsFixed(2)}',
+                                '\$${widget.cambio.toStringAsFixed(2)}',
                                 style: const TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold,
@@ -421,7 +493,7 @@ class ResumenPedidoScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Tel: 6635137212 - pedidosapp.com',
+                          'Tel: $_empresaTelefono - $_empresaSitio',
                           style: TextStyle(
                             fontSize: 10,
                             color: Colors.grey.shade500,
@@ -435,7 +507,7 @@ class ResumenPedidoScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
 
-            // Solo un botón para cerrar
+            // Botón para cerrar
             SizedBox(
               width: double.infinity,
               height: 50,

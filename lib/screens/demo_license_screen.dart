@@ -93,7 +93,8 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
     // Puedes tener múltiples códigos para diferentes clientes
     Map<String, String> codigosValidos = {
       'FARMACIAJB2026HV': 'Licencia Comercial',
-      'DEMO-EXTENDIDA-30': 'Demo extendida 30 días',
+      'TIMABH2026': 'Feterias',
+      'CLIENTET29580': 'Licencia Comercial',
 
       // Agrega más códigos según tus clientes
     };

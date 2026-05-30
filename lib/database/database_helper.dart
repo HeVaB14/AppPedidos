@@ -445,7 +445,6 @@ import 'package:flutter_application_1/models/clientes.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/producto.dart';
-import '../models/clientes.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._privateConstructor();
@@ -1098,5 +1097,40 @@ class DatabaseHelper {
       whereArgs: [pedidoId],
     );
     await db.delete('pedidos', where: 'id = ?', whereArgs: [pedidoId]);
+  }
+
+  // Productos más vendidos
+  Future<List<Map<String, dynamic>>> getProductosMasVendidos() async {
+    final db = await database;
+    return await db.rawQuery('''
+    SELECT 
+      p.id,
+      p.codigo,
+      p.nombreproducto,
+      COALESCE(SUM(d.cantidad), 0) as total_vendido,
+      COALESCE(SUM(d.subtotal), 0) as total_venta
+    FROM productos p
+    LEFT JOIN detalle_pedido d ON p.id = d.idProducto
+    GROUP BY p.id
+    ORDER BY total_vendido DESC
+    LIMIT 10
+  ''');
+  }
+
+  // Productos no vendidos
+  Future<List<Map<String, dynamic>>> getProductosNoVendidos() async {
+    final db = await database;
+    return await db.rawQuery('''
+    SELECT 
+      p.id,
+      p.codigo,
+      p.nombreproducto,
+      p.cantidad as stock
+    FROM productos p
+    LEFT JOIN detalle_pedido d ON p.id = d.idProducto
+    GROUP BY p.id
+    HAVING SUM(d.cantidad) IS NULL OR SUM(d.cantidad) = 0
+    ORDER BY p.nombreproducto
+  ''');
   }
 }

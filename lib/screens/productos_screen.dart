@@ -181,7 +181,7 @@ class _ProductosScreenState extends State<ProductosScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: DropdownButtonFormField<String>(
-                          value: unidadSeleccionada,
+                          initialValue: unidadSeleccionada,
                           decoration: const InputDecoration(
                             labelText: 'Unidad *',
                             border: OutlineInputBorder(),
@@ -422,12 +422,20 @@ class _ProductosScreenState extends State<ProductosScreen> {
                 children: [
                   TextField(
                     controller: codigoController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Código *',
                       border: OutlineInputBorder(),
-                      hintText: 'Ej: LAP-001',
+                      hintText: 'Ej: PROD-12345678',
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.qr_code, color: Colors.orange),
+                        onPressed: () {
+                          setStateDialog(() {
+                            codigoController.text = _generarCodigo();
+                          });
+                        },
+                        tooltip: 'Generar código automático',
+                      ),
                     ),
-                    readOnly: isEditing,
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -462,7 +470,7 @@ class _ProductosScreenState extends State<ProductosScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: DropdownButtonFormField<String>(
-                          value: unidadSeleccionada,
+                          initialValue: unidadSeleccionada,
                           decoration: const InputDecoration(
                             labelText: 'Unidad',
                             border: OutlineInputBorder(),
@@ -684,34 +692,53 @@ class _ProductosScreenState extends State<ProductosScreen> {
   }
 
   Future<void> _eliminarProducto(int id, String nombre) async {
-    showDialog(
+    // 🔒 VERIFICAR SI EL PRODUCTO TIENE PEDIDOS ASOCIADOS
+    final tienePedidos = await _productoTienePedidos(id);
+
+    if (tienePedidos) {
+      _mostrarMensaje(
+        '⚠️ No se puede eliminar "$nombre" porque tiene pedidos asociados.\n\n'
+        'Sugerencia: En lugar de eliminar, puedes deshabilitarlo o reducir su stock a 0.',
+        isError: true,
+      );
+      return;
+    }
+
+    final confirmar = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Eliminar producto'),
         content: Text('¿Eliminar "$nombre" permanentemente?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancelar'),
           ),
           ElevatedButton(
-            onPressed: () async {
-              await DatabaseHelper.instance.deleteProducto(id);
-              Navigator.pop(context);
-              _cargarProductos();
-
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Producto eliminado')),
-                );
-              }
-            },
+            onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Eliminar'),
           ),
         ],
       ),
     );
+
+    if (confirmar == true) {
+      await DatabaseHelper.instance.deleteProducto(id);
+      _cargarProductos();
+      _mostrarMensaje('Producto eliminado');
+    }
+  }
+
+  Future<bool> _productoTienePedidos(int idProducto) async {
+    final db = await DatabaseHelper.instance.database;
+    final result = await db.query(
+      'detalle_pedido',
+      where: 'idProducto = ?',
+      whereArgs: [idProducto],
+      limit: 1,
+    );
+    return result.isNotEmpty;
   }
 
   @override
@@ -939,5 +966,12 @@ class _ProductosScreenState extends State<ProductosScreen> {
         child: const Icon(Icons.add),
       ),
     );
+  }
+
+  String _generarCodigo() {
+    // Obtener el último ID o usar timestamp
+    String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+    String codigo = 'PROD-${timestamp.substring(timestamp.length - 8)}';
+    return codigo;
   }
 }

@@ -128,7 +128,7 @@ class _HistorialPedidosScreenState extends State<HistorialPedidosScreen> {
               onPrimary: Colors.white,
               onSurface: Colors.black,
             ),
-            dialogBackgroundColor: Colors.white,
+            dialogTheme: DialogThemeData(backgroundColor: Colors.white),
           ),
           child: child!,
         );
@@ -158,7 +158,7 @@ class _HistorialPedidosScreenState extends State<HistorialPedidosScreen> {
               onPrimary: Colors.white,
               onSurface: Colors.black,
             ),
-            dialogBackgroundColor: Colors.white,
+            dialogTheme: DialogThemeData(backgroundColor: Colors.white),
           ),
           child: child!,
         );

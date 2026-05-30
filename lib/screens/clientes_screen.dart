@@ -25,6 +25,17 @@ class _ClientesScreenState extends State<ClientesScreen> {
     });
   }
 
+  void _mostrarMensaje(String mensaje, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(mensaje),
+        backgroundColor: isError ? Colors.red : Colors.green,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   Future<void> _agregarEditarCliente({Clientes? cliente}) async {
     final isEditing = cliente != null;
     final nombreController = TextEditingController(
@@ -105,9 +116,7 @@ class _ClientesScreenState extends State<ClientesScreen> {
           ElevatedButton(
             onPressed: () async {
               if (nombreController.text.isNotEmpty &&
-                  apellido1Controller.text.isNotEmpty &&
-                  telefonoController.text.isNotEmpty &&
-                  direccionController.text.isNotEmpty) {
+                  apellido1Controller.text.isNotEmpty) {
                 final nuevoCliente = Clientes(
                   idcliente: cliente?.idcliente,
                   nombrecliente: nombreController.text,
@@ -121,22 +130,13 @@ class _ClientesScreenState extends State<ClientesScreen> {
 
                 if (isEditing) {
                   await DatabaseHelper.instance.updateCliente(nuevoCliente);
+                  _mostrarMensaje('Cliente actualizado');
                 } else {
                   await DatabaseHelper.instance.insertCliente(nuevoCliente);
+                  _mostrarMensaje('Cliente agregado');
                 }
-
                 Navigator.pop(context);
                 _cargarClientes();
-
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        isEditing ? 'Cliente actualizado' : 'Cliente agregado',
-                      ),
-                    ),
-                  );
-                }
               }
             },
             child: Text(isEditing ? 'Actualizar' : 'Guardar'),
@@ -146,35 +146,40 @@ class _ClientesScreenState extends State<ClientesScreen> {
     );
   }
 
-  Future<void> _eliminarCliente(int id, String nombreCompleto) async {
-    showDialog(
+  Future<void> _eliminarCliente(int id, String nombre, String apellido) async {
+    // 🔒 VERIFICAR SI ES EL CLIENTE MOSTRADOR
+    if (nombre == 'MOSTRADOR') {
+      _mostrarMensaje(
+        '⚠️ El cliente MOSTRADOR no se puede eliminar porque es necesario para ventas rápidas.',
+        isError: true,
+      );
+      return;
+    }
+
+    final confirmar = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Eliminar cliente'),
-        content: Text('¿Eliminar a "$nombreCompleto" permanentemente?'),
+        content: Text('¿Eliminar a "$nombre $apellido" permanentemente?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancelar'),
           ),
           ElevatedButton(
-            onPressed: () async {
-              await DatabaseHelper.instance.deleteCliente(id);
-              Navigator.pop(context);
-              _cargarClientes();
-
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Cliente eliminado')),
-                );
-              }
-            },
+            onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Eliminar'),
           ),
         ],
       ),
     );
+
+    if (confirmar == true) {
+      await DatabaseHelper.instance.deleteCliente(id);
+      _cargarClientes();
+      _mostrarMensaje('Cliente eliminado');
+    }
   }
 
   @override
@@ -183,7 +188,7 @@ class _ClientesScreenState extends State<ClientesScreen> {
       appBar: AppBar(
         title: const Text('Clientes'),
         centerTitle: true,
-        backgroundColor: Theme.of(context).primaryColor,
+        backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
       ),
       body: _clientes.isEmpty
@@ -203,6 +208,8 @@ class _ClientesScreenState extends State<ClientesScreen> {
               itemCount: _clientes.length,
               itemBuilder: (context, index) {
                 final cliente = _clientes[index];
+                final esMostrador = cliente.nombrecliente == 'MOSTRADOR';
+
                 return Card(
                   margin: const EdgeInsets.symmetric(
                     horizontal: 8,
@@ -211,14 +218,47 @@ class _ClientesScreenState extends State<ClientesScreen> {
                   elevation: 2,
                   child: ExpansionTile(
                     leading: CircleAvatar(
-                      backgroundColor: Colors.green.shade100,
-                      child: const Icon(Icons.person, color: Colors.green),
+                      backgroundColor: esMostrador
+                          ? Colors.green.shade100
+                          : Colors.blue.shade100,
+                      child: Icon(
+                        esMostrador ? Icons.store : Icons.person,
+                        color: esMostrador ? Colors.green : Colors.blue,
+                      ),
                     ),
                     title: Text(
-                      cliente.nombrecliente,
+                      esMostrador
+                          ? 'MOSTRADOR (Venta directa)'
+                          : cliente.nombrecliente + ' ' + cliente.apellido1,
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     subtitle: Text(cliente.telefono),
+                    trailing: esMostrador
+                        ? Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade300,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Text(
+                              'PROTEGIDO',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          )
+                        : IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: () => _eliminarCliente(
+                              cliente.idcliente!,
+                              cliente.nombrecliente,
+                              cliente.apellido1,
+                            ),
+                          ),
                     children: [
                       Padding(
                         padding: const EdgeInsets.all(16),
@@ -230,30 +270,19 @@ class _ClientesScreenState extends State<ClientesScreen> {
                               style: TextStyle(fontWeight: FontWeight.bold),
                             ),
                             Text(cliente.direccion),
-                            const SizedBox(height: 16),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                ElevatedButton.icon(
-                                  onPressed: () =>
-                                      _agregarEditarCliente(cliente: cliente),
-                                  icon: const Icon(Icons.edit),
-                                  label: const Text('Editar'),
-                                ),
-                                const SizedBox(width: 8),
-                                ElevatedButton.icon(
-                                  onPressed: () => _eliminarCliente(
-                                    cliente.idcliente!,
-                                    cliente.nombrecliente,
+                            const SizedBox(height: 8),
+                            if (!esMostrador)
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  ElevatedButton.icon(
+                                    onPressed: () =>
+                                        _agregarEditarCliente(cliente: cliente),
+                                    icon: const Icon(Icons.edit),
+                                    label: const Text('Editar'),
                                   ),
-                                  icon: const Icon(Icons.delete),
-                                  label: const Text('Eliminar'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.red,
-                                  ),
-                                ),
-                              ],
-                            ),
+                                ],
+                              ),
                           ],
                         ),
                       ),

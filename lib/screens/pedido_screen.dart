@@ -15,7 +15,7 @@ class PedidoScreen extends StatefulWidget {
 
 class _PedidoScreenState extends State<PedidoScreen> {
   Clientes? _clienteSeleccionado;
-  List<ItemPedido> _items = [];
+  final List<ItemPedido> _items = [];
   List<Producto> _productos = [];
   double _montoRecibido = 0;
   double _cambio = 0;
@@ -381,7 +381,7 @@ class _PedidoScreenState extends State<PedidoScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: DropdownButtonFormField<String>(
-                          value: unidadSeleccionada,
+                          initialValue: unidadSeleccionada,
                           decoration: const InputDecoration(
                             labelText: 'Unidad',
                             border: OutlineInputBorder(),
@@ -651,7 +651,7 @@ class _PedidoScreenState extends State<PedidoScreen> {
                       }),
                       icon: const Icon(Icons.remove_circle, size: 40),
                     ),
-                    Container(
+                    SizedBox(
                       width: 60,
                       child: TextField(
                         textAlign: TextAlign.center,
@@ -948,7 +948,7 @@ class _PedidoScreenState extends State<PedidoScreen> {
               color: Colors.white,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.grey.withOpacity(0.3),
+                  color: Colors.grey.withValues(alpha: 0.3),
                   spreadRadius: 2,
                   blurRadius: 10,
                   offset: const Offset(0, -2),
@@ -1001,8 +1001,8 @@ class _PedidoScreenState extends State<PedidoScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _agregarProducto,
-        child: const Icon(Icons.add),
         tooltip: 'Agregar Producto',
+        child: const Icon(Icons.add),
       ),
     );
   }

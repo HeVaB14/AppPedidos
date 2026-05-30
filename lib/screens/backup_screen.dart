@@ -2,8 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
-import '../database/database_helper.dart';
 
 class BackupScreen extends StatefulWidget {
   const BackupScreen({super.key});
@@ -14,12 +14,11 @@ class BackupScreen extends StatefulWidget {
 
 class _BackupScreenState extends State<BackupScreen> {
   bool _isLoading = false;
+  String _empresaNombre = 'Pedidos App';
 
   // ============ EXPORTAR RESPALDO ============
   Future<void> _exportarBackup() async {
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
       final dbPath = await getDatabasesPath();
@@ -32,26 +31,31 @@ class _BackupScreenState extends State<BackupScreen> {
 
       final fecha = DateTime.now();
       final nombreBackup =
-          'backup_${fecha.year}${fecha.month.toString().padLeft(2, '0')}${fecha.day.toString().padLeft(2, '0')}_${fecha.hour}${fecha.minute}.db';
+          'respaldo_${fecha.year}${fecha.month.toString().padLeft(2, '0')}${fecha.day.toString().padLeft(2, '0')}.db';
 
-      final tempDir = await getTemporaryDirectory();
-      final backupFile = File('${tempDir.path}/$nombreBackup');
+      // Guardar en Descargas (Android 10+)
+      final directory = await getDownloadsDirectory();
+      final backupFile = File('${directory?.path}/$nombreBackup');
       await dbFile.copy(backupFile.path);
 
-      await Share.shareXFiles(
-        [XFile(backupFile.path)],
-        text:
-            '📦 Respaldo de Pedidos App\nFecha: ${fecha.toString().substring(0, 16)}\n\nGuarda este archivo en un lugar seguro.',
-      );
+      _mostrarMensaje('✅ Respaldo guardado en: ${directory?.path}');
 
-      _mostrarMensaje('✅ Respaldo exportado correctamente');
+      // Opcional: compartir
+      await Share.shareXFiles([
+        XFile(backupFile.path),
+      ], text: 'Respaldo Pedidos App');
     } catch (e) {
-      _mostrarMensaje('Error al exportar: $e', isError: true);
+      _mostrarMensaje('Error: $e', isError: true);
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _cargarEmpresa() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _empresaNombre = prefs.getString('empresa_nombre') ?? 'Pedidos App';
+    });
   }
 
   // ============ IMPORTAR RESPALDO ============

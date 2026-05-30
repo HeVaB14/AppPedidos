@@ -1,6 +1,16 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_application_1/utils/export_utils.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../database/database_helper.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 class CorteVentasScreen extends StatefulWidget {
   const CorteVentasScreen({super.key});
@@ -17,7 +27,16 @@ class _CorteVentasScreenState extends State<CorteVentasScreen> {
   @override
   void initState() {
     super.initState();
+    _cargarEmpresa();
     _cargarCorte();
+  }
+
+  String _empresaNombre = 'Pedidos App';
+  Future<void> _cargarEmpresa() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _empresaNombre = prefs.getString('empresa_nombre') ?? 'Pedidos App';
+    });
   }
 
   Future<void> _cargarCorte() async {
@@ -70,7 +89,25 @@ class _CorteVentasScreenState extends State<CorteVentasScreen> {
             icon: const Icon(Icons.calendar_today),
             onPressed: _cambiarFecha,
           ),
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _cargarCorte),
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf),
+            onPressed: () => _exportarPDF(),
+            tooltip: 'Exportar PDF',
+          ),
+          IconButton(
+            icon: const Icon(Icons.table_chart),
+            onPressed: () => ExportUtils.exportCorteVentasToExcel(
+              context,
+              _corteData,
+              _fechaSeleccionada,
+            ),
+            tooltip: 'Exportar a Excel',
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _cargarCorte,
+            tooltip: 'Actualizar',
+          ),
         ],
       ),
       body: _isLoading
@@ -164,6 +201,9 @@ class _CorteVentasScreenState extends State<CorteVentasScreen> {
                             Icons.percent,
                             isBold: true,
                           ),
+                          // Dentro del Column en build, después del resumen:
+                          _buildGraficaVentas(),
+                          const SizedBox(height: 16),
                         ],
                       ),
                     ),
@@ -290,6 +330,80 @@ class _CorteVentasScreenState extends State<CorteVentasScreen> {
     );
   }
 
+  Widget _buildGraficaVentas() {
+    final pedidos = _corteData['pedidos'] ?? [];
+    if (pedidos.isEmpty) return const SizedBox.shrink();
+
+    // Agrupar ventas por día (últimos 7 días)
+    Map<String, double> ventasPorDia = {};
+
+    for (var pedido in pedidos) {
+      String fecha = pedido['fecha']?.substring(0, 10) ?? '';
+      double total = pedido['total'] ?? 0;
+      ventasPorDia[fecha] = (ventasPorDia[fecha] ?? 0) + total;
+    }
+
+    final List<BarChartGroupData> barGroups = [];
+    int index = 0;
+    ventasPorDia.forEach((fecha, total) {
+      barGroups.add(
+        BarChartGroupData(
+          x: index,
+          barRods: [
+            BarChartRodData(toY: total, color: Colors.orange, width: 20),
+          ],
+        ),
+      );
+      index++;
+    });
+
+    return Card(
+      elevation: 3,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            const Text(
+              'Ventas por día',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              height: 200,
+              child: BarChart(
+                BarChartData(
+                  alignment: BarChartAlignment.spaceAround,
+                  maxY: ventasPorDia.values.isEmpty
+                      ? 100
+                      : ventasPorDia.values.reduce((a, b) => a > b ? a : b) +
+                            100,
+                  barGroups: barGroups,
+                  titlesData: FlTitlesData(
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        getTitlesWidget: (value, meta) {
+                          final keys = ventasPorDia.keys.toList();
+                          if (value.toInt() < keys.length) {
+                            return Text(
+                              keys[value.toInt()].substring(8, 10),
+                              style: const TextStyle(fontSize: 10),
+                            );
+                          }
+                          return const Text('');
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _cerrarDia() async {
     final confirmar = await showDialog<bool>(
       context: context,
@@ -322,6 +436,91 @@ class _CorteVentasScreenState extends State<CorteVentasScreen> {
           const SnackBar(content: Text('Día cerrado exitosamente')),
         );
       }
+    }
+  }
+
+  Future<void> _exportarPDF() async {
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        build: (context) => pw.Column(
+          children: [
+            pw.Text(
+              _empresaNombre,
+              style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.Text(
+              'Fecha: ${DateFormat('dd/MM/yyyy').format(_fechaSeleccionada)}',
+            ),
+            pw.Divider(),
+            pw.Row(
+              children: [
+                pw.Text(
+                  'Total Ventas: \$${(_corteData['ventasTotales'] ?? 0).toStringAsFixed(2)}',
+                ),
+                pw.Spacer(),
+                pw.Text(
+                  'Ganancia: \$${(_corteData['gananciaTotal'] ?? 0).toStringAsFixed(2)}',
+                ),
+              ],
+            ),
+            pw.Divider(),
+            pw.Text('Productos vendidos: ${_corteData['totalProductos'] ?? 0}'),
+            pw.Text('Pedidos: ${_corteData['totalPedidos'] ?? 0}'),
+          ],
+        ),
+      ),
+    );
+
+    await Printing.sharePdf(
+      bytes: await pdf.save(),
+      filename:
+          'corte_${DateFormat('yyyyMMdd').format(_fechaSeleccionada)}.pdf',
+    );
+  }
+
+  Future<void> _compartirPDF() async {
+    try {
+      final pdf = pw.Document();
+
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          build: (context) => pw.Column(
+            children: [
+              pw.Text(
+                _empresaNombre,
+                style: pw.TextStyle(
+                  fontSize: 20,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.Text(
+                'Fecha: ${DateFormat('dd/MM/yyyy').format(_fechaSeleccionada)}',
+              ),
+              // ... más contenido
+            ],
+          ),
+        ),
+      );
+
+      final pdfBytes = await pdf.save();
+      final tempDir = await getTemporaryDirectory();
+      final file = File(
+        '${tempDir.path}/corte_${DateFormat('yyyyMMdd').format(_fechaSeleccionada)}.pdf',
+      );
+      await file.writeAsBytes(pdfBytes);
+
+      // Usar SharePlus para compartir
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text:
+            '📊 Reporte de ventas - ${DateFormat('dd/MM/yyyy').format(_fechaSeleccionada)}',
+      );
+    } catch (e) {
+      print('Error: $e');
     }
   }
 }
