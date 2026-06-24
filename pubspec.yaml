@@ -51,6 +51,7 @@ dependencies:
   fl_chart: ^1.2.0
   excel: ^4.0.6
   url_launcher: ^6.3.2
+  file_picker: ^12.0.0-beta.7
 intl: ^0.18.0
 share_plus: ^7.0.0
 mobile_scanner: ^4.0.1
@@ -69,7 +70,7 @@ dev_dependencies:
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
-  flutter_launcher_icons: ^0.13.1
+  flutter_launcher_icons: ^0.14.4
 # The following section is specific to Flutter packages.
 flutter:
 

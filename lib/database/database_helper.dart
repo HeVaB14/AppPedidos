@@ -1133,4 +1133,12 @@ class DatabaseHelper {
     ORDER BY p.nombreproducto
   ''');
   }
+
+  // Cerrar la base de datos para poder restaurar respaldo
+  Future<void> closeDatabase() async {
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
+  }
 }

@@ -1,9 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
+import '../database/database_helper.dart';
 
 class BackupScreen extends StatefulWidget {
   const BackupScreen({super.key});
@@ -14,9 +15,8 @@ class BackupScreen extends StatefulWidget {
 
 class _BackupScreenState extends State<BackupScreen> {
   bool _isLoading = false;
-  String _empresaNombre = 'Pedidos App';
 
-  // ============ EXPORTAR RESPALDO ============
+  // ==================== EXPORTAR RESPALDO ====================
   Future<void> _exportarBackup() async {
     setState(() => _isLoading = true);
 
@@ -26,24 +26,25 @@ class _BackupScreenState extends State<BackupScreen> {
 
       if (!await dbFile.exists()) {
         _mostrarMensaje('No se encontró la base de datos', isError: true);
+        setState(() => _isLoading = false);
         return;
       }
 
       final fecha = DateTime.now();
       final nombreBackup =
-          'respaldo_${fecha.year}${fecha.month.toString().padLeft(2, '0')}${fecha.day.toString().padLeft(2, '0')}.db';
+          'backup_${fecha.year}${fecha.month.toString().padLeft(2, '0')}${fecha.day.toString().padLeft(2, '0')}.db';
 
-      // Guardar en Descargas (Android 10+)
-      final directory = await getDownloadsDirectory();
-      final backupFile = File('${directory?.path}/$nombreBackup');
+      // Guardar en Descargas (accesible para el usuario)
+      final downloadsDir = await getDownloadsDirectory();
+      final backupFile = File('${downloadsDir?.path}/$nombreBackup');
       await dbFile.copy(backupFile.path);
 
-      _mostrarMensaje('✅ Respaldo guardado en: ${directory?.path}');
-
-      // Opcional: compartir
+      // Compartir también por si acaso
       await Share.shareXFiles([
         XFile(backupFile.path),
-      ], text: 'Respaldo Pedidos App');
+      ], text: '📦 Respaldo - ${fecha.toString().substring(0, 16)}');
+
+      _mostrarMensaje('✅ Respaldo guardado en: Descargas');
     } catch (e) {
       _mostrarMensaje('Error: $e', isError: true);
     } finally {
@@ -51,56 +52,53 @@ class _BackupScreenState extends State<BackupScreen> {
     }
   }
 
-  Future<void> _cargarEmpresa() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _empresaNombre = prefs.getString('empresa_nombre') ?? 'Pedidos App';
-    });
-  }
-
-  // ============ IMPORTAR RESPALDO ============
+  // ==================== IMPORTAR RESPALDO ====================
   Future<void> _importarBackup() async {
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
-      // Mostrar instrucciones
+      // 1. Seleccionar archivo .db
+      FilePickerResult? result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['db'],
+      );
+
+      if (result == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      final String backupPath = result.files.single.path!;
+      final File backupFile = File(backupPath);
+
+      if (!await backupFile.exists()) {
+        _mostrarMensaje('El archivo no existe', isError: true);
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // 2. Confirmar restauración
       final confirmar = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('📥 Importar Respaldo'),
+          title: const Text('⚠️ Restaurar Respaldo'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Para importar un respaldo, sigue estos pasos:',
+                'Esta acción BORRARÁ todos los datos actuales.',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              const SizedBox(height: 12),
-              const Text('1. Conecta tu teléfono a la computadora'),
-              const Text('2. Busca la carpeta:'),
-              Container(
-                padding: const EdgeInsets.all(8),
-                margin: const EdgeInsets.symmetric(vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: const Text(
-                  'Android/data/com.example.pedidos_app/files/',
-                  style: TextStyle(fontFamily: 'monospace', fontSize: 10),
-                ),
-              ),
-              const Text('3. Copia tu archivo .db como "pedidos_app.db"'),
-              const Text('4. Reemplaza el archivo existente'),
-              const Text('5. Reinicia la app'),
+              const SizedBox(height: 8),
+              const Text('Los datos actuales serán reemplazados.'),
               const SizedBox(height: 16),
-              const Text(
-                '⚠️ Asegúrate de tener un respaldo antes de hacerlo.',
-                style: TextStyle(color: Colors.orange, fontSize: 12),
+              Text(
+                '📅 Archivo: ${result.files.single.name}',
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
               ),
+              const SizedBox(height: 16),
+              const Text('¿Estás seguro?', style: TextStyle(color: Colors.red)),
             ],
           ),
           actions: [
@@ -110,29 +108,50 @@ class _BackupScreenState extends State<BackupScreen> {
             ),
             ElevatedButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Entendido'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Restaurar'),
             ),
           ],
         ),
       );
 
-      if (confirmar == true) {
-        _mostrarMensaje('Reinicia la app para aplicar los cambios');
+      if (confirmar != true) {
+        setState(() => _isLoading = false);
+        return;
       }
+
+      // 3. Cerrar la base de datos actual
+      await DatabaseHelper.instance.closeDatabase();
+
+      // 4. Copiar el respaldo
+      final dbPath = await getDatabasesPath();
+      final destinoFile = File('$dbPath/pedidos_app.db');
+
+      if (await destinoFile.exists()) {
+        await destinoFile.delete();
+      }
+
+      await backupFile.copy(destinoFile.path);
+
+      _mostrarMensaje('✅ Respaldo restaurado correctamente');
+
+      // 5. Forzar reinicio de la app
+      await Future.delayed(const Duration(seconds: 1));
+      exit(0);
     } catch (e) {
-      _mostrarMensaje('Error: $e', isError: true);
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      _mostrarMensaje('Error al importar: $e', isError: true);
+      setState(() => _isLoading = false);
     }
   }
 
-  void _mostrarMensaje(String mensaje, {bool isError = false}) {
+  void _mostrarMensaje(String msg, {bool isError = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(mensaje),
+        content: Text(msg),
         backgroundColor: isError ? Colors.red : Colors.green,
         duration: const Duration(seconds: 3),
       ),
@@ -168,20 +187,16 @@ class _BackupScreenState extends State<BackupScreen> {
                             Icon(Icons.info_outline, color: Colors.blue),
                             SizedBox(width: 8),
                             Text(
-                              '¿Qué es un respaldo?',
+                              'Respaldo de Datos',
                               style: TextStyle(fontWeight: FontWeight.bold),
                             ),
                           ],
                         ),
                         const SizedBox(height: 8),
-                        Text(
-                          'Un respaldo guarda una copia de todos tus productos, clientes y pedidos.\n\n'
-                          '📤 Exportar: Guarda una copia en tu teléfono\n'
-                          '📥 Importar: Restaura una copia (requiere copiar manualmente)',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade700,
-                          ),
+                        const Text(
+                          '📤 Exportar: Guarda copia en Descargas\n'
+                          '📥 Importar: Selecciona un archivo .db guardado',
+                          style: TextStyle(fontSize: 12),
                         ),
                       ],
                     ),
@@ -209,9 +224,7 @@ class _BackupScreenState extends State<BackupScreen> {
                       'Exportar Respaldo',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    subtitle: const Text(
-                      'Guarda una copia de seguridad de tus datos',
-                    ),
+                    subtitle: const Text('Guarda en Descargas'),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                     onTap: _exportarBackup,
                   ),
@@ -238,9 +251,7 @@ class _BackupScreenState extends State<BackupScreen> {
                       'Importar Respaldo',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    subtitle: const Text(
-                      'Ver instrucciones para restaurar datos',
-                    ),
+                    subtitle: const Text('Selecciona un archivo .db'),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                     onTap: _importarBackup,
                   ),
@@ -260,7 +271,7 @@ class _BackupScreenState extends State<BackupScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Recomendación: Exporta un respaldo cada semana y guárdalo en Drive o WhatsApp.',
+                          '💡 Exporta un respaldo cada semana y guárdalo en Drive o WhatsApp.',
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.grey.shade700,

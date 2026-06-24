@@ -55,7 +55,6 @@ class _PedidoScreenState extends State<PedidoScreen> {
         }
       }
 
-      // Crear cliente MOSTRADOR si no existe
       final mostrador = Clientes(
         nombrecliente: 'MOSTRADOR',
         apellido1: '',
@@ -249,7 +248,6 @@ class _PedidoScreenState extends State<PedidoScreen> {
           onCodeScanned: (codigo) async {
             print('Código escaneado: $codigo');
 
-            // Buscar producto por código
             Producto? productoEncontrado;
             for (var p in _productos) {
               if (p.codigo.toLowerCase() == codigo.toLowerCase()) {
@@ -259,10 +257,8 @@ class _PedidoScreenState extends State<PedidoScreen> {
             }
 
             if (productoEncontrado != null) {
-              // Producto existe: mostrar diálogo de cantidad
               _mostrarDialogoCantidad(productoEncontrado);
             } else {
-              // Producto NO existe: preguntar si quiere crearlo
               _mostrarDialogoCrearProducto(codigo);
             }
           },
@@ -271,7 +267,6 @@ class _PedidoScreenState extends State<PedidoScreen> {
     );
   }
 
-  // Diálogo para crear producto desde escáner
   void _mostrarDialogoCrearProducto(String codigo) {
     showDialog(
       context: context,
@@ -299,7 +294,7 @@ class _PedidoScreenState extends State<PedidoScreen> {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              _abrirScanner(); // Volver a escanear
+              _abrirScanner();
             },
             child: const Text('Escanear otro'),
           ),
@@ -320,8 +315,6 @@ class _PedidoScreenState extends State<PedidoScreen> {
     );
   }
 
-  // Crear producto desde código escaneado
-  // Crear producto desde código escaneado
   Future<void> _crearProductoDesdeEscaneo(String codigo) async {
     final nombreController = TextEditingController();
     final precioProveedorController = TextEditingController();
@@ -342,7 +335,6 @@ class _PedidoScreenState extends State<PedidoScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Código (solo lectura)
                   TextField(
                     controller: TextEditingController(text: codigo),
                     decoration: const InputDecoration(
@@ -353,8 +345,6 @@ class _PedidoScreenState extends State<PedidoScreen> {
                     enabled: false,
                   ),
                   const SizedBox(height: 12),
-
-                  // Nombre
                   TextField(
                     controller: nombreController,
                     decoration: const InputDecoration(
@@ -364,8 +354,6 @@ class _PedidoScreenState extends State<PedidoScreen> {
                     autofocus: true,
                   ),
                   const SizedBox(height: 12),
-
-                  // Stock y unidad
                   Row(
                     children: [
                       Expanded(
@@ -404,8 +392,6 @@ class _PedidoScreenState extends State<PedidoScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
-
-                  // Precio Proveedor y Precio Venta
                   Row(
                     children: [
                       Expanded(
@@ -454,8 +440,6 @@ class _PedidoScreenState extends State<PedidoScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
-
-                  // Mostrar ganancia calculada
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
@@ -522,13 +506,12 @@ class _PedidoScreenState extends State<PedidoScreen> {
                     );
 
                     await DatabaseHelper.instance.insertProducto(nuevoProducto);
-                    await _cargarProductos(); // Recargar lista
+                    await _cargarProductos();
 
                     if (mounted) {
                       Navigator.pop(context);
                       _mostrarMensaje('Producto creado exitosamente');
 
-                      // Buscar el producto recién creado y agregarlo al pedido
                       final productoAgregar = _productos.firstWhere(
                         (p) => p.codigo.toLowerCase() == codigo.toLowerCase(),
                       );
@@ -547,11 +530,15 @@ class _PedidoScreenState extends State<PedidoScreen> {
     );
   }
 
+  // ==================== AGREGAR PRODUCTO CON BUSCADOR ====================
   Future<void> _agregarProducto() async {
     if (_productos.isEmpty) {
       _mostrarMensaje('No hay productos registrados', isError: true);
       return;
     }
+
+    List<Producto> productosFiltrados = List.from(_productos);
+    String searchQuery = '';
 
     showModalBottomSheet(
       context: context,
@@ -559,62 +546,204 @@ class _PedidoScreenState extends State<PedidoScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => Container(
-        height: 500,
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            const Text(
-              'Agregar Producto',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const Divider(),
-            Expanded(
-              child: ListView.builder(
-                itemCount: _productos.length,
-                itemBuilder: (context, index) {
-                  final producto = _productos[index];
-                  return Card(
-                    margin: const EdgeInsets.symmetric(vertical: 4),
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.blue.shade100,
-                        child: Text(producto.codigo.substring(0, 1)),
-                      ),
-                      title: Text(producto.nombreproducto),
-                      subtitle: Text(
-                        '\$${producto.precioventa.toStringAsFixed(2)} - Stock: ${producto.cantidad}',
-                      ),
-                      onTap: () {
-                        Navigator.pop(context);
-                        _mostrarDialogoCantidad(producto);
-                      },
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateModal) {
+          return Container(
+            height: MediaQuery.of(context).size.height * 0.85,
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                const Text(
+                  'Agregar Producto',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+
+                // 🔍 CAMPO DE BÚSQUEDA
+                TextField(
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: '🔍 Buscar por nombre o código...',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              setStateModal(() {
+                                searchQuery = '';
+                                productosFiltrados = List.from(_productos);
+                              });
+                            },
+                          )
+                        : null,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                  );
-                },
-              ),
+                    filled: true,
+                    fillColor: Colors.grey.shade50,
+                  ),
+                  onChanged: (value) {
+                    setStateModal(() {
+                      searchQuery = value.toLowerCase().trim();
+                      if (searchQuery.isEmpty) {
+                        productosFiltrados = List.from(_productos);
+                      } else {
+                        productosFiltrados = _productos
+                            .where(
+                              (p) =>
+                                  p.nombreproducto.toLowerCase().contains(
+                                    searchQuery,
+                                  ) ||
+                                  p.codigo.toLowerCase().contains(searchQuery),
+                            )
+                            .toList();
+                      }
+                    });
+                  },
+                ),
+
+                // Contador de resultados
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '${productosFiltrados.length} productos',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                      if (searchQuery.isNotEmpty)
+                        Text(
+                          'Filtrado: "$searchQuery"',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.orange.shade700,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+
+                const Divider(),
+
+                // Lista de productos
+                Expanded(
+                  child: productosFiltrados.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.search_off,
+                                size: 50,
+                                color: Colors.grey.shade400,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No se encontraron productos',
+                                style: TextStyle(color: Colors.grey.shade600),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Prueba con otra palabra',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade400,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          itemCount: productosFiltrados.length,
+                          itemBuilder: (context, index) {
+                            final producto = productosFiltrados[index];
+                            return Card(
+                              margin: const EdgeInsets.symmetric(vertical: 4),
+                              elevation: 1,
+                              child: ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: Colors.blue.shade100,
+                                  child: Text(
+                                    producto.codigo
+                                        .substring(0, 1)
+                                        .toUpperCase(),
+                                    style: TextStyle(
+                                      color: Colors.blue.shade700,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                title: Text(
+                                  producto.nombreproducto,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Código: ${producto.codigo}',
+                                      style: const TextStyle(fontSize: 11),
+                                    ),
+                                    Text(
+                                      'Precio: \$${producto.precioventa.toStringAsFixed(2)} | Stock: ${producto.cantidad} ${producto.unidadmedida}',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: producto.cantidad <= 5
+                                            ? Colors.red.shade700
+                                            : Colors.grey.shade600,
+                                        fontWeight: producto.cantidad <= 5
+                                            ? FontWeight.bold
+                                            : FontWeight.normal,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                trailing: ElevatedButton(
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                    _mostrarDialogoCantidad(producto);
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
+                                  ),
+                                  child: const Text('Agregar'),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
 
   void _mostrarDialogoCantidad(Producto producto) {
-    // Verificar si el producto ya está en el pedido
     final itemExistente = _items.firstWhere(
       (item) => item.producto.id == producto.id,
       orElse: () => ItemPedido(producto: producto, cantidad: 0),
     );
 
-    // Calcular stock disponible REAL
     final int stockDisponible = producto.cantidad.toInt();
     final int yaEnPedido = itemExistente.cantidad;
     final int stockRestante = stockDisponible - yaEnPedido;
 
     int cantidad = 1;
 
-    // Si no hay stock disponible, mostrar mensaje
     if (stockRestante <= 0) {
       _mostrarMensaje(
         'No hay suficiente stock.\n'
@@ -667,7 +796,6 @@ class _PedidoScreenState extends State<PedidoScreen> {
                             setStateDialog(() => cantidad = newValue);
                           } else if (newValue != null &&
                               newValue > stockRestante) {
-                            // Si el usuario ingresa un número mayor, limitar al máximo
                             setStateDialog(() => cantidad = stockRestante);
                           }
                         },
@@ -703,10 +831,8 @@ class _PedidoScreenState extends State<PedidoScreen> {
                   if (cantidad >= 1 && cantidad <= stockRestante) {
                     setState(() {
                       if (itemExistente.cantidad > 0) {
-                        // Actualizar cantidad existente (sumar)
                         itemExistente.cantidad += cantidad;
                       } else {
-                        // Agregar nuevo item
                         _items.add(
                           ItemPedido(producto: producto, cantidad: cantidad),
                         );
@@ -843,7 +969,6 @@ class _PedidoScreenState extends State<PedidoScreen> {
       ),
       body: Column(
         children: [
-          // Tarjeta del cliente
           Card(
             margin: const EdgeInsets.all(16),
             elevation: 4,
@@ -885,7 +1010,6 @@ class _PedidoScreenState extends State<PedidoScreen> {
             ),
           ),
 
-          // Lista de productos
           Expanded(
             child: _items.isEmpty
                 ? const Center(
@@ -941,7 +1065,6 @@ class _PedidoScreenState extends State<PedidoScreen> {
                   ),
           ),
 
-          // Total y botón COBRAR
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
