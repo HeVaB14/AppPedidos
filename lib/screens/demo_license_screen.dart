@@ -14,18 +14,33 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
   bool _isLoading = true;
   bool _isValid = false;
   String _mensaje = '';
+  String _nombreEmpresa = '';
   final TextEditingController _codigoController = TextEditingController();
+  final TextEditingController _empresaController = TextEditingController();
+
+  // 🔐 INICIALES SECRETAS
+  static const String _iniciales = 'MMB';
+  static const String _codigoMaestro = 'MMBMASTER2026';
 
   @override
   void initState() {
     super.initState();
     _verificarLicencia();
+    _cargarNombreEmpresa();
   }
 
   @override
   void dispose() {
     _codigoController.dispose();
+    _empresaController.dispose();
     super.dispose();
+  }
+
+  Future<void> _cargarNombreEmpresa() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _nombreEmpresa = prefs.getString('empresa_nombre') ?? '';
+    });
   }
 
   void launchUrlString(String url) async {
@@ -33,12 +48,14 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No se puede abrir el enlace'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No se puede abrir el enlace'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -46,12 +63,24 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
     final prefs = await SharedPreferences.getInstance();
 
     bool esPagada = prefs.getBool('licencia_activada') ?? false;
-
     if (esPagada) {
       setState(() {
         _isValid = true;
         _isLoading = false;
         _mensaje = '✅ Licencia activa. Acceso completo.';
+      });
+      return;
+    }
+
+    bool demoExpirada = prefs.getBool('demo_expirada') ?? false;
+    if (demoExpirada) {
+      setState(() {
+        _isValid = false;
+        _isLoading = false;
+        _mensaje =
+            '❌ El período de prueba ha expirado.\n\n'
+            'Para activar tu licencia, necesito el nombre exacto de tu negocio.\n'
+            'Escríbelo abajo y contáctame para generarte tu código.';
       });
       return;
     }
@@ -62,30 +91,83 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
     if (fechaInstalacion == null) {
       fechaInstalacion = ahora;
       await prefs.setInt('fecha_instalacion', fechaInstalacion);
+      await prefs.setInt('fecha_instalacion_segura', ahora);
     }
 
     int diasTranscurridos = (ahora - fechaInstalacion) ~/ (1000 * 60 * 60 * 24);
     int diasRestantes = 15 - diasTranscurridos;
 
-    if (diasRestantes <= 0) {
+    int fechaSegura =
+        prefs.getInt('fecha_instalacion_segura') ?? fechaInstalacion;
+    int posibleManipulacion = (ahora - fechaSegura) ~/ (1000 * 60 * 60 * 24);
+
+    if (posibleManipulacion > diasTranscurridos + 1) {
+      await prefs.setBool('demo_expirada', true);
       setState(() {
         _isValid = false;
         _isLoading = false;
         _mensaje =
-            '❌ El período de prueba ha expirado.\n\nContacta al desarrollador para activar la licencia.';
+            '❌ Se ha detectado manipulación de fecha.\n'
+            'Licencia bloqueada permanentemente.';
+      });
+      return;
+    }
+
+    if (diasRestantes <= 0) {
+      await prefs.setBool('demo_expirada', true);
+      setState(() {
+        _isValid = false;
+        _isLoading = false;
+        _mensaje =
+            '❌ El período de prueba ha expirado.\n\n'
+            'Para activar tu licencia, necesito el nombre exacto de tu negocio.\n'
+            'Escríbelo abajo y contáctame para generarte tu código.';
       });
     } else {
       setState(() {
         _isValid = true;
         _isLoading = false;
         _mensaje =
-            '✅ Período de prueba activo\nDías restantes: $diasRestantes\n\n📱 Versión DEMO';
+            '✅ Período de prueba activo\n'
+            'Días restantes: $diasRestantes\n\n📱 Versión DEMO';
       });
     }
   }
 
+  String generarCodigoDesdeNombre(String nombreEmpresa) {
+    String nombreLimpio = nombreEmpresa
+        .toUpperCase()
+        .replaceAll(' ', '')
+        .replaceAll('Á', 'A')
+        .replaceAll('É', 'E')
+        .replaceAll('Í', 'I')
+        .replaceAll('Ó', 'O')
+        .replaceAll('Ú', 'U')
+        .replaceAll('Ñ', 'N');
+
+    int anioActual = DateTime.now().year;
+    return '$_iniciales$nombreLimpio$anioActual';
+  }
+
+  bool _validarCodigo(String codigo) {
+    if (codigo == _codigoMaestro) return true;
+
+    if (!codigo.startsWith(_iniciales)) return false;
+
+    String resto = codigo.substring(_iniciales.length);
+
+    int anioActual = DateTime.now().year;
+    String anioStr = anioActual.toString();
+    if (!resto.endsWith(anioStr)) return false;
+
+    String nombreEmpresa = resto.substring(0, resto.length - anioStr.length);
+    if (nombreEmpresa.length < 3) return false;
+
+    return true;
+  }
+
   Future<void> _activarLicencia() async {
-    String codigo = _codigoController.text.trim();
+    String codigo = _codigoController.text.trim().toUpperCase();
 
     if (codigo.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -97,31 +179,30 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
       return;
     }
 
-    Map<String, String> codigosValidos = {
-      'FARMACIAJB2026HV': 'Licencia Comercial',
-      'TIMABH2026': 'Feterias',
-      'CLIENTET29580': 'Licencia Comercial',
-    };
-
-    if (codigosValidos.containsKey(codigo)) {
+    if (_validarCodigo(codigo)) {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('licencia_activada', true);
-      await prefs.setString('tipo_licencia', codigosValidos[codigo]!);
+      await prefs.setString('tipo_licencia', 'Licencia Comercial');
+      await prefs.setString('codigo_activacion', codigo);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('✅ Licencia activada: ${codigosValidos[codigo]}'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      _verificarLicencia();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Licencia activada correctamente'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        _verificarLicencia();
+      }
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('❌ Código inválido. Contacta al desarrollador.'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Código inválido. Contacta al desarrollador.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -134,7 +215,6 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Logo
               Container(
                 width: 100,
                 height: 100,
@@ -149,8 +229,6 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
                 ),
               ),
               const SizedBox(height: 30),
-
-              // Título
               const Text(
                 'PEDIDOS APP',
                 style: TextStyle(
@@ -160,8 +238,6 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
                 ),
               ),
               const SizedBox(height: 10),
-
-              // Badge demo
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
@@ -178,7 +254,6 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
               ),
               const SizedBox(height: 40),
 
-              // Mensaje de estado
               if (_isLoading)
                 const CircularProgressIndicator()
               else
@@ -193,7 +268,6 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
 
               const SizedBox(height: 30),
 
-              // Botón continuar
               if (_isValid && !_isLoading)
                 SizedBox(
                   width: double.infinity,
@@ -218,6 +292,88 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
                   ),
                 ),
 
+              // 👈 SECCIÓN PARA DEMO EXPIRADA (mostrar nombre de empresa)
+              if (!_isValid && !_isLoading && _nombreEmpresa.isNotEmpty)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text(
+                        '📋 Tu negocio registrado:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _nombreEmpresa,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Usa este nombre para que te genere tu código de activación',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey.shade600,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+
+              // 👈 CAMPO PARA INGRESAR NOMBRE DE EMPRESA (si no está guardado)
+              if (!_isValid && !_isLoading && _nombreEmpresa.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: TextField(
+                    controller: _empresaController,
+                    decoration: const InputDecoration(
+                      labelText: 'Nombre de tu negocio *',
+                      hintText: 'Ej: Ferretería Don Juan',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.business),
+                    ),
+                  ),
+                ),
+
+              if (!_isValid && !_isLoading && _nombreEmpresa.isEmpty)
+                ElevatedButton(
+                  onPressed: () async {
+                    if (_empresaController.text.trim().isNotEmpty) {
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setString(
+                        'empresa_nombre',
+                        _empresaController.text.trim(),
+                      );
+                      _cargarNombreEmpresa();
+                      setState(() {
+                        _nombreEmpresa = _empresaController.text.trim();
+                      });
+                      _mostrarMensaje(
+                        'Nombre guardado. Contacta al desarrollador para tu código.',
+                      );
+                    } else {
+                      _mostrarMensaje(
+                        'Ingresa el nombre de tu negocio',
+                        isError: true,
+                      );
+                    }
+                  },
+                  child: const Text('Guardar nombre'),
+                ),
+
               // Sección de activación
               if (!_isValid && !_isLoading)
                 Column(
@@ -225,7 +381,7 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
                     const Divider(),
                     const SizedBox(height: 10),
                     const Text(
-                      '¿Ya pagaste? Activa tu licencia:',
+                      '¿Ya tienes tu código? Activa tu licencia:',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 10),
@@ -269,7 +425,6 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
 
               const SizedBox(height: 30),
 
-              // ========== SECCIÓN DE CONTACTO ==========
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -287,7 +442,6 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    // Email
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -303,7 +457,6 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    // Teléfono
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -319,13 +472,31 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
                       ],
                     ),
                     const SizedBox(height: 8),
-
-                    // Botón WhatsApp
                     InkWell(
-                      onTap: () {
-                        final String url = '';
-                        // 'https://api.whatsapp.com/send?phone=526635137212&text=Hola%2C%20me%20interesa%20adquirir%20la%20licencia%20de%20la%20app';
-                        // launchUrlString(url);
+                      onTap: () async {
+                        final String phone = '526635137212';
+                        final String message =
+                            'Hola, necesito activar la licencia de Pedidos APP. Mi negocio se llama: $_nombreEmpresa';
+                        final String url =
+                            'whatsapp://send?phone=$phone&text=${Uri.encodeComponent(message)}';
+
+                        final Uri uri = Uri.parse(url);
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(
+                            uri,
+                            mode: LaunchMode.externalApplication,
+                          );
+                        } else {
+                          // Si no tiene WhatsApp, mostrar número
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Contáctame al WhatsApp: +52 6635137212',
+                              ),
+                              backgroundColor: Colors.blue,
+                            ),
+                          );
+                        }
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
@@ -363,6 +534,16 @@ class _DemoLicenseScreenState extends State<DemoLicenseScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  void _mostrarMensaje(String mensaje, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(mensaje),
+        backgroundColor: isError ? Colors.red : Colors.green,
       ),
     );
   }
